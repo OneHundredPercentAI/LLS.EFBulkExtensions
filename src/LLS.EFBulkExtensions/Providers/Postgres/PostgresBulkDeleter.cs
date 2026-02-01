@@ -51,7 +51,7 @@ public sealed class PostgresBulkDeleter : IBulkDeleter
                     {
                         var v = row[col];
                         if (v == DBNull.Value) await importer.WriteNullAsync(cancellationToken);
-                        else await importer.WriteAsync(v, null, cancellationToken);
+                        else await importer.WriteAsync(v, null!, cancellationToken);
                     }
                 }
                 await importer.CompleteAsync(cancellationToken);
