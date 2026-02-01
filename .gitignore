@@ -401,4 +401,4 @@ FodyWeavers.xsd
 # My Ignored files
 .vscode/
 .trae/
-nuget-publish.bat
+nuget.key
