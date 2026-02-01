@@ -398,6 +398,7 @@ FodyWeavers.xsd
 *.sln.iml
 /src/TudoJusto.Acordos.Pernambucanas/PernambucanasAcordoApi.cs
 
-#
+# My Ignored files
 .vscode/
 .trae/
+nuget-publish.bat

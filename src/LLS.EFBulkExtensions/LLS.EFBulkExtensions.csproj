@@ -8,15 +8,15 @@
     <RootNamespace>LLS.EFBulkExtensions</RootNamespace>
     <IsPackable>true</IsPackable>
     <PackageId>LLS.EFBulkExtensions</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>LLServTec</Authors>
     <Description>Extensões de alto desempenho para operações em massa (bulk) com EF Core 9: insert, update e delete, processamento em lotes, suporte a SQL Server e PostgreSQL, conversões e owned types, com opção de retorno de IDs gerados.</Description>
     <PackageTags>efcore;bulk;sqlserver;postgresql</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/lucianolirio/LLS.EFBulkExtensions</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/lucianolirio/LLS.EFBulkExtensions</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/OneHundredPercentAI/LLS.EFBulkExtensions</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/OneHundredPercentAI/LLS.EFBulkExtensions</PackageProjectUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
