@@ -36,7 +36,7 @@ public class BulkInsertConsoleStyleTests
         var opts = BuildOptions();
         if (opts is null) return;
 
-        var people = new List<Customer>(_count);
+        var people = new List<Person>(_count);
         for (int i = 0; i < _count; i++)
         {
             people.Add(new Customer
@@ -123,11 +123,11 @@ public class BulkInsertConsoleStyleTests
     }
 }
 
-public class TestContext : DbContext
+public class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
 {
-    public TestContext(DbContextOptions<TestContext> options) : base(options) { }
     public DbSet<Person> People => Set<Person>();
     public DbSet<Customer> Customers => Set<Customer>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new PersonConfiguration());
