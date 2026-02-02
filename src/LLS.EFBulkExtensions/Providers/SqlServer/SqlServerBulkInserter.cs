@@ -15,7 +15,11 @@ namespace LLS.EFBulkExtensions.Providers.SqlServer;
 
 public sealed class SqlServerBulkInserter : IBulkInserter
 {
-    public async Task BulkInsertAsync<TEntity>(DbContext context, IEnumerable<TEntity> entities, BulkInsertOptions options, CancellationToken cancellationToken = default) where TEntity : class
+    public async Task BulkInsertAsync<TEntity>(
+        DbContext context, 
+        IEnumerable<TEntity> entities, 
+        BulkInsertOptions options, 
+        CancellationToken cancellationToken = default) where TEntity : class
     {
         var entityType = context.Model.FindEntityType(typeof(TEntity)) ?? throw new InvalidOperationException($"Tipo de entidade {typeof(TEntity).Name} não encontrado no modelo.");
         var tableName = entityType.GetTableName() ?? throw new InvalidOperationException("Nome da tabela não encontrado (GetTableName retornou null)");

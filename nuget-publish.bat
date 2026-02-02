@@ -21,11 +21,11 @@ dotnet pack %PROJECT% -c Release -p:PackageVersion=%VERSION% -o src\nupkg
 
 echo.
 echo Publicando pacote principal (.nupkg)...
-dotnet nuget push "src/nupkg/LLS.EFBulkExtensions.%VERSION%.nupkg" --api-key %APIKEY% --source %SOURCE%
+for %%f in (src\nupkg\*.nupkg) do dotnet nuget push "%%f" --api-key %APIKEY% --source %SOURCE% --skip-duplicate
 
 echo.
 echo Publicando pacote de símbolos (.snupkg)...
-dotnet nuget push "src/nupkg/LLS.EFBulkExtensions.%VERSION%.snupkg" --api-key %APIKEY% --source %SOURCE%
+for %%f in (src\nupkg\*.snupkg) do dotnet nuget push "%%f" --api-key %APIKEY% --source %SOURCE% --skip-duplicate
 
 echo.
 echo Publicação concluída com sucesso!

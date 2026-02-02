@@ -1,15 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Threading.Tasks;
 using LLS.EFBulkExtensions.Extensions;
+using LLS.EFBulkExtensions.Options;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using LLS.EFBulkExtensions.Options;
-using Xunit;
+using System.Diagnostics;
 
 namespace LLS.EFBulkExtensions.Tests.SqlServer;
 
@@ -24,7 +18,7 @@ public class BulkInsertConsoleStyleTests
         if (string.IsNullOrWhiteSpace(connectionString)) return null;
         return new DbContextOptionsBuilder<TestContext>().UseSqlServer(connectionString).Options;
     }
-    
+
     [Fact]
     public async Task Should_Create_Database_Model()
     {
@@ -174,4 +168,9 @@ public class ContatoPerson
 {
     public string Email { get; set; } = null!;
     public string Telefone { get; set; } = null!;
+}
+
+public class Customer : Person
+{
+    public string CustomerCode { get; set; } = string.Empty;
 }

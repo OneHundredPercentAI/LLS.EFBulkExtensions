@@ -40,7 +40,7 @@ public static class BulkInsertExtensions
         }
         if (provider == "Npgsql.EntityFrameworkCore.PostgreSQL")
         {
-            IBulkInserter inserter = new LLS.EFBulkExtensions.Providers.Postgres.PostgresBulkInserter();
+            IBulkInserter inserter = new Providers.Postgres.PostgresBulkInserter();
             return inserter.BulkInsertAsync(context, entities, options, cancellationToken);
         }
 
