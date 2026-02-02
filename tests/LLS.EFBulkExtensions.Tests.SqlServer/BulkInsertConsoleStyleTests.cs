@@ -36,10 +36,10 @@ public class BulkInsertConsoleStyleTests
         var opts = BuildOptions();
         if (opts is null) return;
 
-        var people = new List<Person>(_count);
+        var people = new List<Customer>(_count);
         for (int i = 0; i < _count; i++)
         {
-            people.Add(new Person
+            people.Add(new Customer
             {
                 Name = $"Person_{i}_{Guid.NewGuid()}",
                 Age = i % 100,
@@ -113,7 +113,7 @@ public class BulkInsertConsoleStyleTests
         using var context = new TestContext(opts);
         var initial = await context.People.CountAsync();
         var toDelete = await context.People.OrderBy(p => p.Id)
-            .Select(o => new Person() { Id = o.Id, Contato = new ContatoPerson() { Email = "", Telefone = "" } })
+            .Select(o => new Customer() { Id = o.Id, Contato = new ContatoPerson() { Email = "", Telefone = "" } })
             .Take(_count)
             .ToListAsync();
 
