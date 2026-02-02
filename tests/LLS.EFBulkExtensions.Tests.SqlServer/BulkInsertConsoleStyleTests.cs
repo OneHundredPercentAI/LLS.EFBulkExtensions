@@ -127,9 +127,11 @@ public class TestContext : DbContext
 {
     public TestContext(DbContextOptions<TestContext> options) : base(options) { }
     public DbSet<Person> People => Set<Person>();
+    public DbSet<Customer> Customers => Set<Customer>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new PersonConfiguration());
+        modelBuilder.ApplyConfiguration(new CustomerConfiguration());
     }
 }
 
@@ -149,6 +151,15 @@ public class PersonConfiguration : IEntityTypeConfiguration<Person>
             cb.Property(c => c.Email).HasColumnName("contato_email").HasMaxLength(100).IsRequired();
             cb.Property(c => c.Telefone).HasColumnName("contato_telefone").HasMaxLength(20);
         });
+    }
+}
+
+public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
+{
+    public void Configure(EntityTypeBuilder<Customer> builder)
+    {
+        builder.HasBaseType<Person>();
+        builder.Property(c => c.CustomerCode).HasColumnName("customer_code").HasMaxLength(50).IsRequired();
     }
 }
 

@@ -153,6 +153,32 @@ public static class DataTableBuilder
             });
         }
 
+        var discriminator = entityType.GetProperties()
+            .FirstOrDefault(prop =>
+                prop.GetColumnName(store) != null &&
+                string.Equals(prop.Name, "Discriminator", StringComparison.OrdinalIgnoreCase));
+        if (discriminator != null)
+        {
+            mappings.Add(new PropertyMapping
+            {
+                Property = discriminator,
+                ValueAccessor = _ =>
+                {
+                    var clr = Nullable.GetUnderlyingType(discriminator.ClrType) ?? discriminator.ClrType;
+                    if (clr == typeof(string))
+                    {
+                        var full = entityType.Name;
+                        var idx = full.LastIndexOf('.');
+                        return idx >= 0 ? full.Substring(idx + 1) : full;
+                    }
+                    return discriminator.GetDefaultValue();
+                },
+                DefaultClrValue = null,
+                MetadataDefaultValue = discriminator.GetDefaultValue(),
+                Converter = discriminator.GetValueConverter()
+            });
+        }
+
         foreach (var nav in entityType.GetNavigations())
         {
             if (!nav.TargetEntityType.IsOwned()) continue;
