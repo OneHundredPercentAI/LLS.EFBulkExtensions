@@ -169,7 +169,7 @@ public static class DataTableBuilder
                     {
                         var full = entityType.Name;
                         var idx = full.LastIndexOf('.');
-                        return idx >= 0 ? full.Substring(idx + 1) : full;
+                        return idx >= 0 ? full[(idx + 1)..] : full;
                     }
                     return discriminator.GetDefaultValue();
                 },
