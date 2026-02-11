@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LLS.EFBulkExtensions.Tests.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LLS.EFBulkExtensions.Tests.Postgres", "tests\LLS.EFBulkExtensions.Tests.Postgres\LLS.EFBulkExtensions.Tests.Postgres.csproj", "{A1B2C3D4-7777-8888-9999-AAAABBBBCCCC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LLS.EFBulkExtensions.Tests.Sqlite", "tests\LLS.EFBulkExtensions.Tests.Sqlite\LLS.EFBulkExtensions.Tests.Sqlite.csproj", "{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -58,6 +60,18 @@ Global
 		{A1B2C3D4-7777-8888-9999-AAAABBBBCCCC}.Release|x64.Build.0 = Release|Any CPU
 		{A1B2C3D4-7777-8888-9999-AAAABBBBCCCC}.Release|x86.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-7777-8888-9999-AAAABBBBCCCC}.Release|x86.Build.0 = Release|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Debug|x64.Build.0 = Debug|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Debug|x86.Build.0 = Debug|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|x64.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|x64.Build.0 = Release|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|x86.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -66,6 +80,7 @@ Global
 		{DDBC8390-71AD-483E-AA7C-E2BF31F1F36D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A1B2C3D4-1111-2222-3333-444455556666} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{A1B2C3D4-7777-8888-9999-AAAABBBBCCCC} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D7F9745B-42A0-450F-88C9-2360E58D0A10}

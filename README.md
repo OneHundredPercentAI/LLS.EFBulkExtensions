@@ -107,6 +107,7 @@ Extension: [SequenceModelExtensions](file:///c:/Projetos/LLServTec/LLS.EFBulkExt
 ## Database Support
 - SQL Server: [SqlServerBulkInserter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkInserter.cs), [SqlServerBulkUpdater](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkUpdater.cs), [SqlServerBulkDeleter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkDeleter.cs)
 - PostgreSQL: [PostgresBulkInserter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkInserter.cs), [PostgresBulkUpdater](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkUpdater.cs), [PostgresBulkDeleter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkDeleter.cs)
+- SQLite (insert only): [SqliteBulkInserter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/Sqlite/SqliteBulkInserter.cs)
 
 ## How It Works
 - Insert:

@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using LLS.EFBulkExtensions.Providers.SqlServer;
 using Microsoft.EntityFrameworkCore.Metadata;
-using LLS.EFBulkExtensions.Options;
 using LLS.EFBulkExtensions.Core;
+using LLS.EFBulkExtensions.Options;
+using LLS.EFBulkExtensions.Providers.SqlServer;
+using LLS.EFBulkExtensions.Providers.Sqlite;
 
 namespace LLS.EFBulkExtensions.Extensions;
 
@@ -41,6 +42,11 @@ public static class BulkInsertExtensions
         if (provider == "Npgsql.EntityFrameworkCore.PostgreSQL")
         {
             IBulkInserter inserter = new Providers.Postgres.PostgresBulkInserter();
+            return inserter.BulkInsertAsync(context, entities, options, cancellationToken);
+        }
+        if (provider == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            IBulkInserter inserter = new SqliteBulkInserter();
             return inserter.BulkInsertAsync(context, entities, options, cancellationToken);
         }
 

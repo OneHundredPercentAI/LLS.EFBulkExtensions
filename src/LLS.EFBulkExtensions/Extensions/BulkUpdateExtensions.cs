@@ -1,8 +1,9 @@
-using Microsoft.EntityFrameworkCore;
-using LLS.EFBulkExtensions.Providers.SqlServer;
-using LLS.EFBulkExtensions.Providers.Postgres;
 using LLS.EFBulkExtensions.Core;
 using LLS.EFBulkExtensions.Options;
+using LLS.EFBulkExtensions.Providers.Postgres;
+using LLS.EFBulkExtensions.Providers.SqlServer;
+using LLS.EFBulkExtensions.Providers.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 namespace LLS.EFBulkExtensions.Extensions;
 
@@ -21,6 +22,11 @@ public static class BulkUpdateExtensions
         if (provider == "Npgsql.EntityFrameworkCore.PostgreSQL")
         {
             IBulkUpdater updater = new PostgresBulkUpdater();
+            return updater.BulkUpdateAsync(context, entities, options, cancellationToken);
+        }
+        if (provider == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            IBulkUpdater updater = new SqliteBulkUpdater();
             return updater.BulkUpdateAsync(context, entities, options, cancellationToken);
         }
 

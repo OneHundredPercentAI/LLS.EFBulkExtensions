@@ -12,7 +12,7 @@
     <Version>1.2.0</Version>
     <Authors>LLServTec</Authors>
     <Description>Extensões de alto desempenho para operações em massa (bulk) com EF Core 9: insert, update e delete, processamento em lotes, suporte a SQL Server e PostgreSQL, conversões e owned types, com opção de retorno de IDs gerados.</Description>
-    <PackageTags>efcore;bulk;sqlserver;postgresql</PackageTags>
+    <PackageTags>efcore;bulk;sqlserver;postgresql;sqlite</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>

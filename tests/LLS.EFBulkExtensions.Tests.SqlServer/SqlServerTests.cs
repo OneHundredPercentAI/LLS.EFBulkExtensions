@@ -1,28 +1,22 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Threading.Tasks;
 using LLS.EFBulkExtensions.Extensions;
+using LLS.EFBulkExtensions.Options;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using LLS.EFBulkExtensions.Options;
-using Xunit;
+using System.Diagnostics;
 
-namespace LLS.EFBulkExtensions.Tests.Postgres;
+namespace LLS.EFBulkExtensions.Tests.SqlServer;
 
-public class BulkInsertConsoleStyleTests
+public class SqlServerTests
 {
     private static readonly int _count = 1000_000;
     private static readonly int _batchSize = 10_000;
 
     private static DbContextOptions<TestContext>? BuildOptions()
     {
-        var connectionString = "Host=127.0.0.1;Database=BulkInsertTestDb;Username=postgres;Password=abc1234$";
+        var connectionString = "Server=127.0.0.1;Database=BulkInsertTestDb;User Id=sa;Password=abc1234$;TrustServerCertificate=True;";
         if (string.IsNullOrWhiteSpace(connectionString)) return null;
-        return new DbContextOptionsBuilder<TestContext>().UseNpgsql(connectionString).Options;
+        return new DbContextOptionsBuilder<TestContext>().UseSqlServer(connectionString).Options;
     }
 
     [Fact]
@@ -42,61 +36,46 @@ public class BulkInsertConsoleStyleTests
         var opts = BuildOptions();
         if (opts is null) return;
 
-        try
+        var people = new List<Person>(_count);
+        for (int i = 0; i < _count; i++)
         {
-            using (var context = new TestContext(opts))
+            people.Add(new Customer
             {
-                var entityType = context.Model.FindEntityType(typeof(Person))!;
-                foreach (var _ in entityType.GetProperties()) { }
-                foreach (var _ in entityType.GetNavigations()) { }
-            }
-
-            var count = _count;
-            var people = new List<Person>(count);
-            for (int i = 0; i < count; i++)
-            {
-                people.Add(new Person
+                Name = $"Person_{i}_{Guid.NewGuid()}",
+                Age = i % 100,
+                Status = i % 2 == 0 ? PersonStatus.Active : PersonStatus.Inactive,
+                Contato = new ContatoPerson
                 {
-                    Name = $"Person_{i}_{Guid.NewGuid()}",
-                    Age = i % 100,
-                    Status = i % 2 == 0 ? PersonStatus.Active : PersonStatus.Inactive,
-                    Contato = new ContatoPerson
-                    {
-                        Email = $"user{i}@example.com",
-                        Telefone = $"55119{i:00000000}"
-                    }
-                });
-            }
-
-            using (var context = new TestContext(opts))
-            {
-                var sw = Stopwatch.StartNew();
-                var options = new BulkInsertOptions
-                {
-                    ReturnGeneratedIds = false,
-                    BatchSize = _batchSize,
-                    TimeoutSeconds = 120,
-                    PreserveIdentity = false,
-                    UseInternalTransaction = false,
-                    KeepNulls = false,
-                    UseAppLock = false,
-                };
-                await context.BulkInsertAsync(people, options);
-                sw.Stop();
-                Assert.True(sw.ElapsedMilliseconds >= 0);
-            }
-
-            using (var context = new TestContext(opts))
-            {
-                var dbCount = await context.People.CountAsync();
-                Assert.True(dbCount >= count);
-                var defaultCount = await context.People.Where(p => p.ValorPadrao == 50).CountAsync();
-                Assert.True(defaultCount >= count);
-            }
+                    Email = $"user{i}@example.com",
+                    Telefone = $"55119{i:00000000}"
+                }
+            });
         }
-        catch (Exception ex)
+
+        using (var context = new TestContext(opts))
         {
-            throw new Xunit.Sdk.XunitException("Integration test failed: " + ex.Message + "\n" + ex.StackTrace);
+            var sw = Stopwatch.StartNew();
+            var options = new BulkInsertOptions
+            {
+                ReturnGeneratedIds = false,
+                BatchSize = _batchSize,
+                TimeoutSeconds = 120,
+                PreserveIdentity = false,
+                UseInternalTransaction = false,
+                KeepNulls = false,
+                UseAppLock = false,
+            };
+            await context.BulkInsertAsync(people, options);
+            sw.Stop();
+            Assert.True(sw.ElapsedMilliseconds >= 0);
+        }
+
+        using (var context = new TestContext(opts))
+        {
+            var dbCount = await context.People.CountAsync();
+            Assert.True(dbCount >= _count);
+            var defaultCount = await context.People.Where(p => p.ValorPadrao == 50).CountAsync();
+            Assert.True(defaultCount >= _count);
         }
     }
 
@@ -105,6 +84,7 @@ public class BulkInsertConsoleStyleTests
     {
         var opts = BuildOptions();
         if (opts is null) return;
+
         using var context = new TestContext(opts);
         var peopleToUpdate = await context.People.OrderBy(p => p.Id).Take(_count).ToListAsync();
         foreach (var p in peopleToUpdate)
@@ -113,7 +93,11 @@ public class BulkInsertConsoleStyleTests
             p.Status = PersonStatus.Inactive;
             p.Contato.Email = "upd_" + p.Contato.Email;
         }
+        var swUp = Stopwatch.StartNew();
         await context.BulkUpdateAsync(peopleToUpdate, new BulkUpdateOptions { BatchSize = _batchSize });
+        swUp.Stop();
+        Assert.True(swUp.ElapsedMilliseconds >= 0);
+
         var updatedCount = await context.People
             .Where(p => p.Name.EndsWith("_U") && p.Status == PersonStatus.Inactive && p.Contato.Email.StartsWith("upd_"))
             .CountAsync();
@@ -125,22 +109,29 @@ public class BulkInsertConsoleStyleTests
     {
         var opts = BuildOptions();
         if (opts is null) return;
+
         using var context = new TestContext(opts);
         var initial = await context.People.CountAsync();
-        var toDelete = await context.People.OrderBy(p => p.Id).Take(_count).ToListAsync();
+        var toDelete = await context.People.OrderBy(p => p.Id)
+            .Select(o => new Customer() { Id = o.Id, Contato = new ContatoPerson() { Email = "", Telefone = "" } })
+            .Take(_count)
+            .ToListAsync();
+
         await context.BulkDeleteAsync(toDelete, new BulkDeleteOptions { BatchSize = _batchSize });
         var after = await context.People.CountAsync();
         Assert.True(after <= initial);
     }
 }
 
-public class TestContext : DbContext
+public class TestContext(DbContextOptions<TestContext> options) : DbContext(options)
 {
-    public TestContext(DbContextOptions<TestContext> options) : base(options) { }
     public DbSet<Person> People => Set<Person>();
+    public DbSet<Customer> Customers => Set<Customer>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new PersonConfiguration());
+        modelBuilder.ApplyConfiguration(new CustomerConfiguration());
     }
 }
 
@@ -163,6 +154,15 @@ public class PersonConfiguration : IEntityTypeConfiguration<Person>
     }
 }
 
+public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
+{
+    public void Configure(EntityTypeBuilder<Customer> builder)
+    {
+        builder.HasBaseType<Person>();
+        builder.Property(c => c.CustomerCode).HasColumnName("customer_code").HasMaxLength(50).IsRequired();
+    }
+}
+
 public enum PersonStatus { Active = 1, Inactive = 2 }
 
 public class Person
@@ -179,4 +179,9 @@ public class ContatoPerson
 {
     public string Email { get; set; } = null!;
     public string Telefone { get; set; } = null!;
+}
+
+public class Customer : Person
+{
+    public string CustomerCode { get; set; } = string.Empty;
 }

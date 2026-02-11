@@ -2,10 +2,11 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using LLS.EFBulkExtensions.Providers.SqlServer;
-using LLS.EFBulkExtensions.Providers.Postgres;
 using LLS.EFBulkExtensions.Core;
 using LLS.EFBulkExtensions.Options;
+using LLS.EFBulkExtensions.Providers.Postgres;
+using LLS.EFBulkExtensions.Providers.SqlServer;
+using LLS.EFBulkExtensions.Providers.Sqlite;
 
 namespace LLS.EFBulkExtensions.Extensions;
 
@@ -24,6 +25,11 @@ public static class BulkDeleteExtensions
         if (provider == "Npgsql.EntityFrameworkCore.PostgreSQL")
         {
             IBulkDeleter deleter = new PostgresBulkDeleter();
+            return deleter.BulkDeleteAsync(context, entities, options, cancellationToken);
+        }
+        if (provider == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            IBulkDeleter deleter = new SqliteBulkDeleter();
             return deleter.BulkDeleteAsync(context, entities, options, cancellationToken);
         }
 
