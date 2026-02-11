@@ -2,7 +2,7 @@
 
 [Português] | [English](README.md)
 
-Extensões de alto desempenho para operações em massa (bulk) com Entity Framework Core 9: insert, update e delete em grandes volumes, com processamento em lote, suporte a SQL Server e PostgreSQL, tratamento de tipos/conversões, owned types e opção de retorno de IDs gerados.
+Extensões de alto desempenho para operações em massa (bulk) com Entity Framework Core: insert, update e delete em grandes volumes, com processamento em lote, suporte a SQL Server e PostgreSQL, tratamento de tipos/conversões, owned types e opção de retorno de IDs gerados.
 
 ## Recursos
 - Bulk insert, update e delete com DbContext via métodos de extensão
@@ -13,8 +13,20 @@ Extensões de alto desempenho para operações em massa (bulk) com Entity Framew
 - Transação interna opcional e configurações adicionais por anotação de modelo
 
 ## Compatibilidade e Dependências
-- .NET: net9.0
-- EF Core 9.0 (Relational)
+- Target frameworks .NET:
+  - net5.0, net6.0, net7.0, net8.0, net9.0, net10.0
+- Versões de EF Core (Relational):
+  - 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 (alinhadas com o target framework)
+
+| .NET TFM | EF Core Relational |
+|---------|---------------------|
+| net5.0  | 5.0.x               |
+| net6.0  | 6.0.x               |
+| net7.0  | 7.0.x               |
+| net8.0  | 8.0.x               |
+| net9.0  | 9.0.x               |
+| net10.0 | 10.0.x              |
+
 - Provedores:
   - SQL Server: Microsoft.Data.SqlClient
   - PostgreSQL: Npgsql
@@ -109,8 +121,12 @@ Construção de dados: [DataTableBuilder](file:///c:/Projetos/LLServTec/LLS.EFBu
 - PostgreSQL: [BulkInsertConsoleStyleTests.cs](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/tests/LLS.EFBulkExtensions.Tests.Postgres/BulkInsertConsoleStyleTests.cs)
 
 ## Requisitos
-- EF Core 9 com mapeamento correto das entidades (tabela, schema, PK)
-- Para retornar IDs em inserts, utilize PK com `ValueGeneratedOnAdd` e, se desejar, anote `ReturnGeneratedIds` via modelo
+- EF Core com mapeamento correto das entidades (tabela, schema, PK)
+- Para retornar IDs em inserts:
+  - Utilize PK com `ValueGeneratedOnAdd` e, se desejar, anote `ReturnGeneratedIds` via modelo.
+  - Tipos CLR de ID suportados para retorno de IDs gerados:
+    - Numéricos: `long`, `int`, `short`, `byte`, `ulong`, `uint`, `ushort` (e variantes anuláveis).
+    - `Guid` (tanto em SQL Server quanto em PostgreSQL).
 
 ## APIs
 - Inserts: [BulkInsertAsync](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Extensions/BulkInsertExtensions.cs)

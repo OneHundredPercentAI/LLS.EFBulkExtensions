@@ -43,9 +43,37 @@ public sealed class SqlServerBulkInserter : IBulkInserter
             string Q(string s) => "[" + s.Replace("]", "]]") + "]";
             var dest = schema is null ? Q(tableName) : Q(schema) + "." + Q(tableName);
             var store = StoreObjectIdentifier.Table(tableName, schema);
-            var idProp = entityType.FindPrimaryKey()?.Properties.First();
-            var idCol = idProp?.GetColumnName(store);
-            var destCols = properties.Select(p => p.GetColumnName(store)!).Where(c => c != idCol).ToList();
+            var idProp = entityType.FindPrimaryKey()?.Properties.First()
+                ?? throw new InvalidOperationException($"A entidade {entityType.DisplayName()} não possui chave primária configurada.");
+            var idCol = idProp.GetColumnName(store)
+                ?? throw new InvalidOperationException($"Coluna de chave primária não encontrada para a entidade {entityType.DisplayName()}.");
+
+            var idClrType = idProp.ClrType;
+            var idUnderlyingClrType = Nullable.GetUnderlyingType(idClrType) ?? idClrType;
+            string idSqlType;
+
+            if (idUnderlyingClrType == typeof(long) ||
+                idUnderlyingClrType == typeof(int) ||
+                idUnderlyingClrType == typeof(short) ||
+                idUnderlyingClrType == typeof(byte) ||
+                idUnderlyingClrType == typeof(ulong) ||
+                idUnderlyingClrType == typeof(uint) ||
+                idUnderlyingClrType == typeof(ushort))
+            {
+                idSqlType = "bigint";
+            }
+            else if (idUnderlyingClrType == typeof(Guid))
+            {
+                idSqlType = "uniqueidentifier";
+            }
+            else
+            {
+                throw new NotSupportedException($"Tipo de ID não suportado para retorno de IDs no SqlServerBulkInserter: {idClrType.FullName}");
+            }
+
+            var destCols = properties.Select(p => p.GetColumnName(store)!)
+                                     .Where(c => c != idCol)
+                                     .ToList();
 
             using (var cmd = conn.CreateCommand())
             {
@@ -87,25 +115,37 @@ public sealed class SqlServerBulkInserter : IBulkInserter
                 var colsList = string.Join(", ", destCols.Select(Q));
                 var srcVals = string.Join(", ", destCols.Select(c => "src." + Q(c)));
                 cmd.CommandText = $@"
-DECLARE @out TABLE (Id bigint, corr uniqueidentifier);
+DECLARE @out TABLE (Id {idSqlType}, corr uniqueidentifier);
 MERGE {dest} AS d
 USING {tmpName} AS src
 ON 1 = 0
 WHEN NOT MATCHED THEN
     INSERT ({colsList}) VALUES ({srcVals})
-OUTPUT inserted.{Q(idCol!)}, src.__corr INTO @out;
+OUTPUT inserted.{Q(idCol)}, src.__corr INTO @out;
 SELECT Id, corr FROM @out;";
                 using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-                var propInfo = idProp?.PropertyInfo!;
-                var idType = idProp?.ClrType ?? typeof(long);
+                var propInfo = idProp.PropertyInfo
+                    ?? throw new InvalidOperationException($"Propriedade de chave primária {idProp.Name} não possui PropertyInfo associado.");
+                var idType = idClrType;
+                var idUnderlyingType = idUnderlyingClrType;
                 var map = new Dictionary<Guid, int>(list.Count);
                 for (int i = 0; i < corr.Length; i++) map[corr[i]] = i;
                 while (await reader.ReadAsync(cancellationToken))
                 {
-                    var idVal = reader.GetInt64(0);
+                    object idVal;
+                    if (idUnderlyingType == typeof(Guid))
+                    {
+                        idVal = reader.GetGuid(0);
+                    }
+                    else
+                    {
+                        var idLong = reader.GetInt64(0);
+                        idVal = IdConversionHelper.FromInt64(idLong, idType);
+                    }
+
                     var corrVal = reader.GetGuid(1);
                     var idx = map[corrVal];
-                    propInfo!.SetValue(list[idx], ConvertToClr(idVal, idType));
+                    propInfo.SetValue(list[idx], idVal);
                 }
             }
 
@@ -143,19 +183,5 @@ SELECT Id, corr FROM @out;";
         {
             await conn.CloseAsync();
         }
-    }
-
-    private static object ConvertToClr(long value, Type clrType)
-    {
-        var underlying = Nullable.GetUnderlyingType(clrType) ?? clrType;
-        if (underlying == typeof(long)) return value;
-        if (underlying == typeof(int)) return (int)value;
-        if (underlying == typeof(short)) return (short)value;
-        if (underlying == typeof(byte)) return (byte)value;
-        if (underlying == typeof(decimal)) return (decimal)value;
-        if (underlying == typeof(ulong)) return (ulong)value;
-        if (underlying == typeof(uint)) return (uint)value;
-        if (underlying == typeof(ushort)) return (ushort)value;
-        throw new NotSupportedException($"Tipo de ID não suportado para conversão: {clrType.FullName}");
     }
 }

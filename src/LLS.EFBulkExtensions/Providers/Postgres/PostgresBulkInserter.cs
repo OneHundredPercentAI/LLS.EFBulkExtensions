@@ -36,8 +36,10 @@ public sealed class PostgresBulkInserter : IBulkInserter
         {
             string Q(string s) => "\"" + s.Replace("\"", "\"\"") + "\"";
             var store = StoreObjectIdentifier.Table(tableName, schema);
-            var idProp = entityType.FindPrimaryKey()?.Properties.First();
-            var idCol = idProp?.GetColumnName(store);
+            var idProp = entityType.FindPrimaryKey()?.Properties.First()
+                ?? throw new InvalidOperationException($"A entidade {entityType.DisplayName()} não possui chave primária configurada.");
+            var idCol = idProp.GetColumnName(store)
+                ?? throw new InvalidOperationException($"Coluna de chave primária não encontrada para a entidade {entityType.DisplayName()}.");
             var destCols = properties.Select(p => p.GetColumnName(store)!).ToList();
 
             var fullDest = schema is null ? Q(tableName) : Q(schema) + "." + Q(tableName);
@@ -87,16 +89,28 @@ SELECT {colsList}
 FROM {Q(tmpName)}
 RETURNING {Q(idCol!)}, ""__corr"";";
                     using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-                    var propInfo = idProp?.PropertyInfo!;
-                    var idType = idProp?.ClrType ?? typeof(long);
+                    var propInfo = idProp.PropertyInfo
+                        ?? throw new InvalidOperationException($"Propriedade de chave primária {idProp.Name} não possui PropertyInfo associado.");
+                    var idType = idProp.ClrType;
+                    var idUnderlyingType = Nullable.GetUnderlyingType(idType) ?? idType;
                     var map = new Dictionary<Guid, int>(list.Count);
                     for (int i = 0; i < corr.Length; i++) map[corr[i]] = i;
                     while (await reader.ReadAsync(cancellationToken))
                     {
-                        var idVal = reader.GetFieldValue<long>(0);
+                        object idVal;
+                        if (idUnderlyingType == typeof(Guid))
+                        {
+                            idVal = reader.GetFieldValue<Guid>(0);
+                        }
+                        else
+                        {
+                            var idLong = reader.GetFieldValue<long>(0);
+                            idVal = IdConversionHelper.FromInt64(idLong, idType);
+                        }
+
                         var corrVal = reader.GetFieldValue<Guid>(1);
                         var idx = map[corrVal];
-                        propInfo!.SetValue(list[idx], ConvertToClr(idVal, idType));
+                        propInfo.SetValue(list[idx], idVal);
                     }
                 }
 
@@ -133,19 +147,5 @@ RETURNING {Q(idCol!)}, ""__corr"";";
                 await conn.CloseAsync();
             }
         }
-    }
-
-    private static object ConvertToClr(long value, Type clrType)
-    {
-        var underlying = Nullable.GetUnderlyingType(clrType) ?? clrType;
-        if (underlying == typeof(long)) return value;
-        if (underlying == typeof(int)) return (int)value;
-        if (underlying == typeof(short)) return (short)value;
-        if (underlying == typeof(byte)) return (byte)value;
-        if (underlying == typeof(decimal)) return (decimal)value;
-        if (underlying == typeof(ulong)) return (ulong)value;
-        if (underlying == typeof(uint)) return (uint)value;
-        if (underlying == typeof(ushort)) return (ushort)value;
-        throw new NotSupportedException($"Tipo de ID não suportado para conversão: {clrType.FullName}");
     }
 }

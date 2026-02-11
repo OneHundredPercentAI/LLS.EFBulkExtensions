@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Trae.BulkInsert.Tests")]
+[assembly: InternalsVisibleTo("LLS.EFBulkExtensions.Tests.SqlServer")]
+[assembly: InternalsVisibleTo("LLS.EFBulkExtensions.Tests.Postgres")]
 

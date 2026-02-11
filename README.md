@@ -2,7 +2,7 @@
 
 [English] | [Português](README.pt-BR.md)
 
-High-performance extensions for EF Core 9 bulk operations: insert, update and delete with large volumes, batch processing, SQL Server and PostgreSQL support, type conversions, owned types, and optional returning of generated IDs.
+High-performance extensions for EF Core bulk operations: insert, update and delete with large volumes, batch processing, SQL Server and PostgreSQL support, type conversions, owned types, and optional returning of generated IDs.
 
 ## Features
 - Bulk insert, update and delete via DbContext extension methods
@@ -13,8 +13,20 @@ High-performance extensions for EF Core 9 bulk operations: insert, update and de
 - Optional internal transaction and extra configuration via model annotations
 
 ## Compatibility and Dependencies
-- .NET: net9.0
-- EF Core 9.0 (Relational)
+- .NET target frameworks:
+  - net5.0, net6.0, net7.0, net8.0, net9.0, net10.0
+- EF Core (Relational) versions:
+  - 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 (matched per target framework)
+
+| .NET TFM | EF Core Relational |
+|---------|---------------------|
+| net5.0  | 5.0.x               |
+| net6.0  | 6.0.x               |
+| net7.0  | 7.0.x               |
+| net8.0  | 8.0.x               |
+| net9.0  | 9.0.x               |
+| net10.0 | 10.0.x              |
+
 - Providers:
   - SQL Server: Microsoft.Data.SqlClient
   - PostgreSQL: Npgsql
@@ -109,8 +121,12 @@ Data construction: [DataTableBuilder](file:///c:/Projetos/LLServTec/LLS.EFBulkEx
 - PostgreSQL: [BulkInsertConsoleStyleTests.cs](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/tests/LLS.EFBulkExtensions.Tests.Postgres/BulkInsertConsoleStyleTests.cs)
 
 ## Requirements
-- EF Core 9 with correct entity mapping (table, schema, PK)
-- To return IDs on inserts, use PK with `ValueGeneratedOnAdd` and optionally annotate `ReturnGeneratedIds` via model
+- EF Core with correct entity mapping (table, schema, PK)
+- To return IDs on inserts:
+  - Use PK with `ValueGeneratedOnAdd` and optionally annotate `ReturnGeneratedIds` via model.
+  - Supported ID CLR types for returning generated IDs:
+    - Numeric: `long`, `int`, `short`, `byte`, `ulong`, `uint`, `ushort` (and nullable variants).
+    - `Guid` (both SQL Server and PostgreSQL).
 
 ## APIs
 - Inserts: [BulkInsertAsync](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Extensions/BulkInsertExtensions.cs)

@@ -1,8 +1,8 @@
 namespace LLS.EFBulkExtensions.Options;
 
-public class BulkUpdateOptions
+public sealed class BulkUpdateOptions
 {
-    public int BatchSize { get; set; } = 5000;
-    public int TimeoutSeconds { get; set; } = 30;
-    public bool UseInternalTransaction { get; set; } = false;
+    public int BatchSize { get; init; } = 5000;
+    public int TimeoutSeconds { get; init; } = 30;
+    public bool UseInternalTransaction { get; init; } = false;
 }
