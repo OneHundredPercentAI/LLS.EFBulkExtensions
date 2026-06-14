@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage;
 using LLS.EFBulkExtensions.Core;
 using LLS.EFBulkExtensions.Core.Internal;
 using LLS.EFBulkExtensions.Options;
@@ -36,6 +37,10 @@ public sealed class SqlServerBulkInserter : IBulkInserter
             await conn.OpenAsync(cancellationToken);
             shouldClose = true;
         }
+
+        // Quando há uma transação ambiente do EF, os comandos e o SqlBulkCopy devem participar dela;
+        // caso contrário, o SqlBulkCopy lança em conexão com transação local pendente.
+        var transaction = (SqlTransaction?)context.Database.CurrentTransaction?.GetDbTransaction();
 
         if (options.ReturnGeneratedIds)
         {
@@ -77,6 +82,7 @@ public sealed class SqlServerBulkInserter : IBulkInserter
 
             using (var cmd = conn.CreateCommand())
             {
+                cmd.Transaction = transaction;
                 cmd.CommandText = $"SELECT TOP 0 {string.Join(", ", destCols.Select(Q))} INTO {tmpName} FROM {dest}";
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
                 cmd.CommandText = $"ALTER TABLE {tmpName} ADD [__corr] uniqueidentifier NOT NULL";
@@ -93,9 +99,9 @@ public sealed class SqlServerBulkInserter : IBulkInserter
             }
 
             var bulkOptions2 = SqlBulkCopyOptions.Default;
-            if (options.UseInternalTransaction) bulkOptions2 |= SqlBulkCopyOptions.UseInternalTransaction;
+            if (options.UseInternalTransaction && transaction == null) bulkOptions2 |= SqlBulkCopyOptions.UseInternalTransaction;
             if (options.KeepNulls) bulkOptions2 |= SqlBulkCopyOptions.KeepNulls;
-            using (var bulk = new SqlBulkCopy(conn, bulkOptions2, null)
+            using (var bulk = new SqlBulkCopy(conn, bulkOptions2, transaction)
             {
                 DestinationTableName = tmpName,
                 BatchSize = Math.Max(1, options.BatchSize),
@@ -112,6 +118,7 @@ public sealed class SqlServerBulkInserter : IBulkInserter
 
             using (var cmd = conn.CreateCommand())
             {
+                cmd.Transaction = transaction;
                 var colsList = string.Join(", ", destCols.Select(Q));
                 var srcVals = string.Join(", ", destCols.Select(c => "src." + Q(c)));
                 cmd.CommandText = $@"
@@ -151,6 +158,7 @@ SELECT Id, corr FROM @out;";
 
             using (var cmd = conn.CreateCommand())
             {
+                cmd.Transaction = transaction;
                 cmd.CommandText = $"DROP TABLE {tmpName}";
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
@@ -159,10 +167,10 @@ SELECT Id, corr FROM @out;";
         {
             var bulkOptions = SqlBulkCopyOptions.Default;
             if (options.PreserveIdentity) bulkOptions |= SqlBulkCopyOptions.KeepIdentity;
-            if (options.UseInternalTransaction) bulkOptions |= SqlBulkCopyOptions.UseInternalTransaction;
+            if (options.UseInternalTransaction && transaction == null) bulkOptions |= SqlBulkCopyOptions.UseInternalTransaction;
             if (options.KeepNulls) bulkOptions |= SqlBulkCopyOptions.KeepNulls;
 
-            using var bulk = new SqlBulkCopy(conn, bulkOptions, null)
+            using var bulk = new SqlBulkCopy(conn, bulkOptions, transaction)
             {
                 DestinationTableName = schema is null ? $"[{tableName}]" : $"[{schema}].[{tableName}]",
                 BatchSize = Math.Max(1, options.BatchSize),
