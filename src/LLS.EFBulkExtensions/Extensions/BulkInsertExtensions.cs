@@ -15,7 +15,7 @@ public static class BulkInsertExtensions
         var entityType = context.Model.FindEntityType(typeof(TEntity));
         var pk = entityType?.FindPrimaryKey();
         var idProp = pk?.Properties.Count == 1 ? pk.Properties[0] : null;
-        var returnIdsAnno = idProp?.FindAnnotation("Trae:ReturnGeneratedIds")?.Value as bool?;
+        var returnIdsAnno = idProp?.FindAnnotation(SequenceModelExtensions.ReturnGeneratedIdsAnnotation)?.Value as bool?;
         if (returnIdsAnno.HasValue)
         {
             options = new BulkInsertOptions
