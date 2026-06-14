@@ -8,5 +8,4 @@ public sealed class BulkInsertOptions
     public bool PreserveIdentity { get; init; } = false;
     public bool UseInternalTransaction { get; init; } = true;
     public bool KeepNulls { get; init; } = false;
-    public bool UseAppLock { get; init; } = false;
 }

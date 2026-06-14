@@ -57,8 +57,7 @@ public class SQLiteTests
             TimeoutSeconds = 120,
             PreserveIdentity = false,
             UseInternalTransaction = true,
-            KeepNulls = false,
-            UseAppLock = false
+            KeepNulls = false
         };
 
         await context.BulkInsertAsync(people, options);
