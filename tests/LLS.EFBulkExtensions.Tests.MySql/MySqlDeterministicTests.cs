@@ -70,11 +70,18 @@ public class MySqlDeterministicTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task BulkInsert_ReturnGeneratedIds_Throws()
+    public async Task BulkInsert_ReturnGeneratedIds_PopulatesEntityIds()
     {
-        using var ctx = new TestContext(Opts());
-        await Assert.ThrowsAsync<NotSupportedException>(() =>
-            ctx.BulkInsertAsync(BuildPeople(5), new BulkInsertOptions { ReturnGeneratedIds = true }));
+        var people = BuildPeople(10);
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertAsync(people, new BulkInsertOptions { ReturnGeneratedIds = true });
+
+        Assert.All(people, p => Assert.True(p.Id > 0));
+        Assert.Equal(10, people.Select(p => p.Id).Distinct().Count());
+
+        using var verify = new TestContext(Opts());
+        var dbIds = await verify.People.Select(p => p.Id).OrderBy(x => x).ToListAsync();
+        Assert.Equal(people.Select(p => p.Id).OrderBy(x => x), dbIds);
     }
 
     [Fact]

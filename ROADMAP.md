@@ -11,9 +11,9 @@ honesta do que falta e do que foi adiado conscientemente.
 Hoje há suporte a SQL Server, PostgreSQL, SQLite e MySQL/MariaDB, com insert, update,
 delete e insert-or-update (upsert).
 
-### Pendências do provider MySQL
-- [ ] `ReturnGeneratedIds` (hoje lança `NotSupportedException`; exigiria INSERT multi-linha
-  com `LAST_INSERT_ID` em vez do `MySqlBulkCopy`).
+### Provider MySQL
+- [x] `ReturnGeneratedIds` via INSERT multi-linha + `LAST_INSERT_ID` (assume
+  `auto_increment_increment = 1`).
 - Requisito operacional: `MySqlBulkCopy` usa `LOAD DATA LOCAL INFILE` — precisa de
   `AllowLoadLocalInfile=true` na conexão e `local_infile` habilitado no servidor.
 
