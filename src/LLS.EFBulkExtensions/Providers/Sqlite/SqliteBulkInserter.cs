@@ -16,9 +16,9 @@ namespace LLS.EFBulkExtensions.Providers.Sqlite;
 /// <summary>
 /// Bulk insert implementation for SQLite.
 /// Since SQLite does not expose a dedicated bulk API, this implementation:
-/// - Builds a DataTable with DataTableBuilder
+/// - Resolves columns with DataTableBuilder.BuildColumns (no intermediate DataTable)
 /// - Uses a single transaction (when requested) and a prepared INSERT command
-/// - Executes the command once per row
+/// - Streams the entities, executing the command once per row
 /// This still yields significant gains compared to issuing separate inserts without a transaction.
 /// </summary>
 public sealed class SqliteBulkInserter : IBulkInserter
@@ -40,7 +40,7 @@ public sealed class SqliteBulkInserter : IBulkInserter
         }
 
         var includeIdentity = options.PreserveIdentity;
-        var (dataTable, _) = DataTableBuilder.Build(context, list, includeIdentity: includeIdentity);
+        var (bulkColumns, _, _) = DataTableBuilder.BuildColumns(context, list, includeIdentity: includeIdentity);
 
         var conn = context.Database.GetDbConnection();
         var shouldClose = false;
@@ -61,8 +61,8 @@ public sealed class SqliteBulkInserter : IBulkInserter
 
         try
         {
-            // Column list from DataTable (already respecting identity configuration)
-            var columns = dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToList();
+            // Colunas resolvidas (já respeitando a configuração de identidade)
+            var columns = bulkColumns.Select(c => c.ColumnName).ToList();
             if (columns.Count == 0)
             {
                 return;
@@ -139,13 +139,12 @@ public sealed class SqliteBulkInserter : IBulkInserter
                     ?? throw new InvalidOperationException($"Propriedade de chave primária {idProp.Name} não possui PropertyInfo associado.");
                 var targetType = idClrType!;
 
-                for (int i = 0; i < dataTable.Rows.Count; i++)
+                for (int i = 0; i < list.Count; i++)
                 {
-                    var row = dataTable.Rows[i];
-                    for (int cIndex = 0; cIndex < columns.Count; cIndex++)
+                    var entity = list[i];
+                    for (int cIndex = 0; cIndex < bulkColumns.Count; cIndex++)
                     {
-                        var value = row[columns[cIndex]];
-                        cmd.Parameters[cIndex].Value = value ?? DBNull.Value;
+                        cmd.Parameters[cIndex].Value = bulkColumns[cIndex].GetProviderValue(entity!) ?? DBNull.Value;
                     }
 
                     using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -159,13 +158,11 @@ public sealed class SqliteBulkInserter : IBulkInserter
             }
             else
             {
-                for (int i = 0; i < dataTable.Rows.Count; i++)
+                foreach (var entity in list)
                 {
-                    var row = dataTable.Rows[i];
-                    for (int cIndex = 0; cIndex < columns.Count; cIndex++)
+                    for (int cIndex = 0; cIndex < bulkColumns.Count; cIndex++)
                     {
-                        var value = row[columns[cIndex]];
-                        cmd.Parameters[cIndex].Value = value ?? DBNull.Value;
+                        cmd.Parameters[cIndex].Value = bulkColumns[cIndex].GetProviderValue(entity!) ?? DBNull.Value;
                     }
 
                     await cmd.ExecuteNonQueryAsync(cancellationToken);
