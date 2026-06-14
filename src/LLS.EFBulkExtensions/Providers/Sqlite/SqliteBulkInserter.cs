@@ -9,6 +9,7 @@ using LLS.EFBulkExtensions.Core.Internal;
 using LLS.EFBulkExtensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace LLS.EFBulkExtensions.Providers.Sqlite;
 
@@ -49,7 +50,14 @@ public sealed class SqliteBulkInserter : IBulkInserter
             shouldClose = true;
         }
 
-        using var transaction = options.UseInternalTransaction ? await conn.BeginTransactionAsync(cancellationToken) : null;
+        // Se já existe transação ambiente (EF), participamos dela e não abrimos outra
+        // (SQLite não suporta transações aninhadas). Só criamos/encerramos transação própria
+        // quando não há ambiente e UseInternalTransaction está ativo.
+        var ambientTransaction = context.Database.CurrentTransaction?.GetDbTransaction();
+        await using var ownTransaction = ambientTransaction == null && options.UseInternalTransaction
+            ? await conn.BeginTransactionAsync(cancellationToken)
+            : null;
+        var transaction = ambientTransaction ?? ownTransaction;
 
         try
         {
@@ -164,16 +172,16 @@ public sealed class SqliteBulkInserter : IBulkInserter
                 }
             }
 
-            if (transaction != null)
+            if (ownTransaction != null)
             {
-                await transaction.CommitAsync(cancellationToken);
+                await ownTransaction.CommitAsync(cancellationToken);
             }
         }
         catch
         {
-            if (transaction != null)
+            if (ownTransaction != null)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await ownTransaction.RollbackAsync(cancellationToken);
             }
             throw;
         }

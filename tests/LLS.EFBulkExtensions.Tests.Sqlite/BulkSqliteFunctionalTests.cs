@@ -1,0 +1,252 @@
+using LLS.EFBulkExtensions.Extensions;
+using LLS.EFBulkExtensions.Options;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+
+namespace LLS.EFBulkExtensions.Tests.Sqlite;
+
+/// <summary>
+/// Testes funcionais determinísticos em SQLite in-memory.
+/// Reaproveita os modelos definidos em <see cref="TestSqliteContext"/> (Person/Customer/owned/enum/default/TPH).
+/// Cada teste usa uma conexão própria mantida aberta para isolar o banco :memory:.
+/// </summary>
+public class BulkSqliteFunctionalTests
+{
+    private static async Task<(TestSqliteContext Context, SqliteConnection Connection)> CreateContextAsync()
+    {
+        // Conexão explícita mantida aberta => o banco :memory: sobrevive enquanto a conexão existir.
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<TestSqliteContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        var context = new TestSqliteContext(options);
+        await context.Database.EnsureCreatedAsync();
+        return (context, connection);
+    }
+
+    private static List<Customer> BuildCustomers(int count)
+    {
+        var list = new List<Customer>(count);
+        for (int i = 0; i < count; i++)
+        {
+            list.Add(new Customer
+            {
+                Name = $"Person_{i}",
+                Age = i % 100,
+                Status = i % 2 == 0 ? PersonStatus.Active : PersonStatus.Inactive,
+                CustomerCode = $"C{i:0000}",
+                Contato = new ContatoPerson
+                {
+                    Email = $"user{i}@example.com",
+                    Telefone = $"55119{i:00000000}"
+                }
+            });
+        }
+        return list;
+    }
+
+    [Fact]
+    public async Task BulkInsert_PersistsAllRows()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var people = BuildCustomers(50);
+        await context.BulkInsertAsync(people);
+
+        Assert.Equal(50, await context.People.CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkInsert_AppliesMetadataDefaultValue()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        // ValorPadrao não é setado => deve cair no default do modelo (50).
+        await context.BulkInsertAsync(BuildCustomers(10));
+
+        Assert.Equal(10, await context.People.Where(p => p.ValorPadrao == 50).CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkInsert_PersistsOwnedType()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        await context.BulkInsertAsync(BuildCustomers(10));
+
+        var first = await context.People.OrderBy(p => p.Id).FirstAsync();
+        Assert.Equal("user0@example.com", first.Contato.Email);
+        Assert.Equal("5511900000000", first.Contato.Telefone);
+    }
+
+    [Fact]
+    public async Task BulkInsert_PersistsEnumAsString()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        await context.BulkInsertAsync(BuildCustomers(10));
+
+        // Status é convertido via EnumToStringConverter.
+        var activeCount = await context.People.Where(p => p.Status == PersonStatus.Active).CountAsync();
+        Assert.Equal(5, activeCount);
+
+        // Confirma que a coluna guarda o nome do enum, não o número.
+        await using var raw = connection.CreateCommand();
+        raw.CommandText = "SELECT COUNT(*) FROM people WHERE Status = 'Active'";
+        var rawActive = Convert.ToInt32(await raw.ExecuteScalarAsync());
+        Assert.Equal(5, rawActive);
+    }
+
+    [Fact]
+    public async Task BulkInsert_SetsTphDiscriminator()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        await context.BulkInsertAsync(BuildCustomers(10));
+
+        // Todas as linhas inseridas como Customer devem ser materializadas como Customer.
+        Assert.Equal(10, await context.Customers.CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkInsert_ReturnGeneratedIds_PopulatesEntityIds()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var people = BuildCustomers(10);
+        Assert.All(people, p => Assert.Equal(0, p.Id));
+
+        await context.BulkInsertAsync(people, new BulkInsertOptions { ReturnGeneratedIds = true });
+
+        // Todos receberam Id, únicos e existentes no banco.
+        Assert.All(people, p => Assert.True(p.Id > 0));
+        Assert.Equal(10, people.Select(p => p.Id).Distinct().Count());
+
+        var dbIds = await context.People.Select(p => p.Id).OrderBy(x => x).ToListAsync();
+        Assert.Equal(people.Select(p => p.Id).OrderBy(x => x), dbIds);
+    }
+
+    [Fact]
+    public async Task BulkUpdate_AppliesChanges()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var people = BuildCustomers(20);
+        await context.AddRangeAsync(people);
+        await context.SaveChangesAsync();
+
+        var toUpdate = await context.People.OrderBy(p => p.Id).ToListAsync();
+        foreach (var p in toUpdate)
+        {
+            p.Name += "_U";
+            p.Status = PersonStatus.Inactive;
+            p.Contato.Email = "upd_" + p.Contato.Email;
+        }
+
+        await context.BulkUpdateAsync(toUpdate);
+
+        var updated = await context.People
+            .Where(p => p.Name.EndsWith("_U") && p.Status == PersonStatus.Inactive && p.Contato.Email.StartsWith("upd_"))
+            .CountAsync();
+        Assert.Equal(20, updated);
+    }
+
+    [Fact]
+    public async Task BulkDelete_RemovesRows()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var people = BuildCustomers(20);
+        await context.AddRangeAsync(people);
+        await context.SaveChangesAsync();
+
+        var toDelete = await context.People.OrderBy(p => p.Id).Take(8).ToListAsync();
+        await context.BulkDeleteAsync(toDelete);
+
+        Assert.Equal(12, await context.People.CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkInsert_EmptyCollection_DoesNothing()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        await context.BulkInsertAsync(new List<Customer>());
+
+        Assert.Equal(0, await context.People.CountAsync());
+    }
+
+    // --- Transação ambiente do EF (mesma classe de bug do SQL Server) ---
+
+    [Fact]
+    public async Task BulkInsert_WithinTransaction_Rollback_PersistsNothing()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        await using (var tx = await context.Database.BeginTransactionAsync())
+        {
+            await context.BulkInsertAsync(BuildCustomers(10), new BulkInsertOptions { UseInternalTransaction = false });
+            await tx.RollbackAsync();
+        }
+
+        // Mesma conexão/banco :memory: => o rollback deve ter descartado tudo.
+        Assert.Equal(0, await context.People.CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkInsert_WithinTransaction_Commit_Persists()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        await using (var tx = await context.Database.BeginTransactionAsync())
+        {
+            await context.BulkInsertAsync(BuildCustomers(10), new BulkInsertOptions { UseInternalTransaction = false });
+            await tx.CommitAsync();
+        }
+
+        Assert.Equal(10, await context.People.CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkInsert_DefaultOptions_WithinTransaction_Works()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        // Default: UseInternalTransaction = true. Dentro de uma transação ambiente,
+        // o inserter não pode tentar abrir uma transação aninhada.
+        await using (var tx = await context.Database.BeginTransactionAsync())
+        {
+            await context.BulkInsertAsync(BuildCustomers(10));
+            await tx.CommitAsync();
+        }
+
+        Assert.Equal(10, await context.People.CountAsync());
+    }
+}

@@ -9,6 +9,7 @@ using LLS.EFBulkExtensions.Core.Internal;
 using LLS.EFBulkExtensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace LLS.EFBulkExtensions.Providers.Sqlite;
 
@@ -38,7 +39,13 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
             await conn.OpenAsync(cancellationToken);
         }
 
-        using var transaction = options.UseInternalTransaction ? await conn.BeginTransactionAsync(cancellationToken) : null;
+        // Participa da transação ambiente do EF se houver; só abre transação própria quando não há
+        // (SQLite não suporta transações aninhadas).
+        var ambientTransaction = context.Database.CurrentTransaction?.GetDbTransaction();
+        await using var ownTransaction = ambientTransaction == null && options.UseInternalTransaction
+            ? await conn.BeginTransactionAsync(cancellationToken)
+            : null;
+        var transaction = ambientTransaction ?? ownTransaction;
 
         try
         {
@@ -75,16 +82,16 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            if (transaction != null)
+            if (ownTransaction != null)
             {
-                await transaction.CommitAsync(cancellationToken);
+                await ownTransaction.CommitAsync(cancellationToken);
             }
         }
         catch
         {
-            if (transaction != null)
+            if (ownTransaction != null)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await ownTransaction.RollbackAsync(cancellationToken);
             }
             throw;
         }
