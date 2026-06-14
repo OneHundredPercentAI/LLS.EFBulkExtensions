@@ -1,0 +1,144 @@
+using LLS.EFBulkExtensions.Extensions;
+using LLS.EFBulkExtensions.Options;
+using Microsoft.EntityFrameworkCore;
+
+namespace LLS.EFBulkExtensions.Tests.Postgres;
+
+/// <summary>
+/// Testes de integração determinísticos contra um PostgreSQL local.
+/// Usa um banco dedicado e limpa a tabela antes de cada teste.
+/// Verifica também se o BulkInsert participa da transação ambiente do EF (bug irmão do #1).
+/// </summary>
+public class PostgresDeterministicTests : IAsyncLifetime
+{
+    private const string ConnectionString =
+        "Host=127.0.0.1;Database=BulkDetTestDb;Username=postgres;Password=abc1234$";
+
+    private static DbContextOptions<TestContext> Opts() =>
+        new DbContextOptionsBuilder<TestContext>().UseNpgsql(ConnectionString).Options;
+
+    public async Task InitializeAsync()
+    {
+        using var ctx = new TestContext(Opts());
+        await ctx.Database.EnsureCreatedAsync();
+        await ctx.Database.ExecuteSqlRawAsync("DELETE FROM contato.people;");
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
+
+    private static List<Person> BuildPeople(int count)
+    {
+        var list = new List<Person>(count);
+        for (int i = 0; i < count; i++)
+        {
+            list.Add(new Person
+            {
+                Name = $"Person_{i}",
+                Age = i % 100,
+                Status = i % 2 == 0 ? PersonStatus.Active : PersonStatus.Inactive,
+                Contato = new ContatoPerson { Email = $"user{i}@example.com", Telefone = $"55119{i:00000000}" }
+            });
+        }
+        return list;
+    }
+
+    [Fact]
+    public async Task BulkInsert_PersistsAllRows()
+    {
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertAsync(BuildPeople(50));
+
+        using var verify = new TestContext(Opts());
+        Assert.Equal(50, await verify.People.CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkInsert_ReturnGeneratedIds_PopulatesEntityIds()
+    {
+        var people = BuildPeople(10);
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertAsync(people, new BulkInsertOptions { ReturnGeneratedIds = true });
+
+        Assert.All(people, p => Assert.True(p.Id > 0));
+        Assert.Equal(10, people.Select(p => p.Id).Distinct().Count());
+
+        using var verify = new TestContext(Opts());
+        var dbIds = await verify.People.Select(p => p.Id).OrderBy(x => x).ToListAsync();
+        Assert.Equal(people.Select(p => p.Id).OrderBy(x => x), dbIds);
+    }
+
+    [Fact]
+    public async Task BulkInsert_WithinTransaction_Rollback_PersistsNothing()
+    {
+        using (var ctx = new TestContext(Opts()))
+        {
+            await using var tx = await ctx.Database.BeginTransactionAsync();
+            await ctx.BulkInsertAsync(BuildPeople(10), new BulkInsertOptions { UseInternalTransaction = false });
+            await tx.RollbackAsync();
+        }
+
+        using var verify = new TestContext(Opts());
+        Assert.Equal(0, await verify.People.CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkInsert_WithinTransaction_Commit_Persists()
+    {
+        using (var ctx = new TestContext(Opts()))
+        {
+            await using var tx = await ctx.Database.BeginTransactionAsync();
+            await ctx.BulkInsertAsync(BuildPeople(10), new BulkInsertOptions { UseInternalTransaction = false });
+            await tx.CommitAsync();
+        }
+
+        using var verify = new TestContext(Opts());
+        Assert.Equal(10, await verify.People.CountAsync());
+    }
+
+    [Fact]
+    public async Task BulkUpdate_AppliesChanges()
+    {
+        using (var seed = new TestContext(Opts()))
+        {
+            await seed.AddRangeAsync(BuildPeople(20));
+            await seed.SaveChangesAsync();
+        }
+
+        using (var ctx = new TestContext(Opts()))
+        {
+            var toUpdate = await ctx.People.OrderBy(p => p.Id).ToListAsync();
+            foreach (var p in toUpdate)
+            {
+                p.Name += "_U";
+                p.Status = PersonStatus.Inactive;
+                p.Contato.Email = "upd_" + p.Contato.Email;
+            }
+            await ctx.BulkUpdateAsync(toUpdate);
+        }
+
+        using var verify = new TestContext(Opts());
+        var updated = await verify.People
+            .Where(p => p.Name.EndsWith("_U") && p.Status == PersonStatus.Inactive && p.Contato.Email.StartsWith("upd_"))
+            .CountAsync();
+        Assert.Equal(20, updated);
+    }
+
+    [Fact]
+    public async Task BulkDelete_RemovesRows()
+    {
+        using (var seed = new TestContext(Opts()))
+        {
+            await seed.AddRangeAsync(BuildPeople(20));
+            await seed.SaveChangesAsync();
+        }
+
+        using (var ctx = new TestContext(Opts()))
+        {
+            var toDelete = await ctx.People.OrderBy(p => p.Id).Take(8).ToListAsync();
+            await ctx.BulkDeleteAsync(toDelete);
+        }
+
+        using var verify = new TestContext(Opts());
+        Assert.Equal(12, await verify.People.CountAsync());
+    }
+}

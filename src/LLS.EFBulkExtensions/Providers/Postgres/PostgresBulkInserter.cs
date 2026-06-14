@@ -51,19 +51,20 @@ public sealed class PostgresBulkInserter : IBulkInserter
                 {
                     cmd.CommandText = $"CREATE TEMP TABLE {Q(tmpName)} AS SELECT {string.Join(", ", destCols.Select(Q))} FROM {fullDest} LIMIT 0;";
                     await cmd.ExecuteNonQueryAsync(cancellationToken);
-                    cmd.CommandText = $"ALTER TABLE {Q(tmpName)} ADD COLUMN \"__corr\" uuid NOT NULL;";
+                    cmd.CommandText = $"ALTER TABLE {Q(tmpName)} ADD COLUMN \"__ord\" bigint NOT NULL;";
                     await cmd.ExecuteNonQueryAsync(cancellationToken);
                 }
 
-                dataTable.Columns.Add("__corr", typeof(Guid));
-                var corr = new Guid[list.Count];
+                // Coluna ordinal. RETURNING não consegue projetar colunas que existem apenas na origem
+                // (temp table); por isso correlacionamos por posição: INSERT ... SELECT ... ORDER BY "__ord"
+                // emite as linhas do RETURNING na ordem de inserção, igual à ordem da lista.
+                dataTable.Columns.Add("__ord", typeof(long));
                 for (int i = 0; i < list.Count; i++)
                 {
-                    corr[i] = Guid.NewGuid();
-                    dataTable.Rows[i]["__corr"] = corr[i];
+                    dataTable.Rows[i]["__ord"] = (long)i;
                 }
 
-                var copyCols = string.Join(", ", destCols.Select(Q).Concat(new[] { Q("__corr") }));
+                var copyCols = string.Join(", ", destCols.Select(Q).Concat(new[] { Q("__ord") }));
                 using (var importer = await conn.BeginBinaryImportAsync($"COPY {Q(tmpName)} ({copyCols}) FROM STDIN (FORMAT BINARY)", cancellationToken))
                 {
                     foreach (DataRow row in dataTable.Rows)
@@ -75,7 +76,7 @@ public sealed class PostgresBulkInserter : IBulkInserter
                             if (v == DBNull.Value) await importer.WriteNullAsync(cancellationToken);
                             else await importer.WriteAsync(v, null!, cancellationToken);
                         }
-                        await importer.WriteAsync((Guid)row["__corr"], null!, cancellationToken);
+                        await importer.WriteAsync((long)row["__ord"], null!, cancellationToken);
                     }
                     await importer.CompleteAsync(cancellationToken);
                 }
@@ -87,14 +88,14 @@ public sealed class PostgresBulkInserter : IBulkInserter
 INSERT INTO {fullDest} ({colsList})
 SELECT {colsList}
 FROM {Q(tmpName)}
-RETURNING {Q(idCol!)}, ""__corr"";";
+ORDER BY ""__ord""
+RETURNING {Q(idCol!)};";
                     using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
                     var propInfo = idProp.PropertyInfo
                         ?? throw new InvalidOperationException($"Propriedade de chave primária {idProp.Name} não possui PropertyInfo associado.");
                     var idType = idProp.ClrType;
                     var idUnderlyingType = Nullable.GetUnderlyingType(idType) ?? idType;
-                    var map = new Dictionary<Guid, int>(list.Count);
-                    for (int i = 0; i < corr.Length; i++) map[corr[i]] = i;
+                    var index = 0;
                     while (await reader.ReadAsync(cancellationToken))
                     {
                         object idVal;
@@ -108,9 +109,8 @@ RETURNING {Q(idCol!)}, ""__corr"";";
                             idVal = IdConversionHelper.FromInt64(idLong, idType);
                         }
 
-                        var corrVal = reader.GetFieldValue<Guid>(1);
-                        var idx = map[corrVal];
-                        propInfo.SetValue(list[idx], idVal);
+                        propInfo.SetValue(list[index], idVal);
+                        index++;
                     }
                 }
 
