@@ -8,7 +8,8 @@ honesta do que falta e do que foi adiado conscientemente.
 - [ ] MySQL
 - [ ] MariaDB
 
-Hoje há suporte a SQL Server, PostgreSQL e SQLite.
+Hoje há suporte a SQL Server, PostgreSQL e SQLite, com insert, update, delete e
+insert-or-update (upsert).
 
 ## Melhorias de performance
 - [ ] **Streaming do caminho `ReturnGeneratedIds`** (SQL Server e PostgreSQL).
@@ -23,8 +24,10 @@ Hoje há suporte a SQL Server, PostgreSQL e SQLite.
 ## Qualidade / API pública
 - [ ] **XML docs** (`<GenerateDocumentationFile>` + comentários `///`) na superfície
   pública (extensões, options) para melhor experiência de IntelliSense/NuGet.
-- [ ] Considerar registro via DI / factory de providers em vez de `new` direto por
-  operação (hoje é barato porque os providers são stateless).
+- [x] Dispatch de providers centralizado em `BulkProviderRegistry` (instâncias singleton
+  stateless). Falta opcional: integração com DI (`IServiceCollection`).
+- [ ] **Upsert por chave natural** (`MatchProperties`) além da PK; e **retorno de IDs**
+  no upsert. O upsert v1 correlaciona somente por PK e não retorna IDs.
 
 ## Limitações conhecidas
 - **SQLite** não possui API de bulk nativa: insert/update/delete são executados
@@ -34,6 +37,8 @@ Hoje há suporte a SQL Server, PostgreSQL e SQLite.
   discriminador customizados (`HasDiscriminator().HasValue("...")`) não são honrados.
 - **Tipos de ID para retorno**: numéricos inteiros (e anuláveis) e `Guid`. Outros
   tipos não são suportados em `ReturnGeneratedIds`.
+- **Upsert (v1)**: correspondência somente por PK (valores de PK obrigatórios); não
+  retorna IDs; colunas computadas/`OnAddOrUpdate` não são tratadas no ramo de insert.
 
 ## Testes
 - Suíte determinística (rápida, em `Category!=Performance`) cobre os três bancos.

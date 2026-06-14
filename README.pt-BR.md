@@ -5,7 +5,7 @@
 Extensões de alto desempenho para operações em massa (bulk) com EF Core: insert, update e delete em grandes volumes, com streaming (sem cópia integral em memória), conversões de tipos, owned types, TPH e retorno opcional de IDs gerados. Suporta SQL Server, PostgreSQL e SQLite.
 
 ## Recursos
-- Bulk insert, update e delete via métodos de extensão do `DbContext`
+- Bulk insert, update, delete e insert-or-update (upsert) via métodos de extensão do `DbContext`
 - Inserts em streaming (as entidades alimentam o provider diretamente, sem materializar um `DataTable` intermediário)
 - Suporte a SQL Server (`SqlBulkCopy`/`MERGE`), PostgreSQL (`COPY` binário) e SQLite (comando preparado por linha dentro de uma transação)
 - Retorno opcional de IDs gerados em inserts
@@ -76,10 +76,21 @@ await context.BulkDeleteAsync(entitiesToDelete, new BulkDeleteOptions {
 });
 ```
 
+Insert ou update (upsert), correlacionado pela chave primária:
+```csharp
+await context.BulkInsertOrUpdateAsync(entities, new BulkInsertOrUpdateOptions {
+    BatchSize = 10_000,
+    TimeoutSeconds = 120,
+    UseInternalTransaction = false
+});
+```
+> O upsert correlaciona pela **chave primária**: linhas cuja PK já existe são atualizadas, as demais inseridas. Os valores de PK devem estar preenchidos nas entidades. Veja as limitações abaixo.
+
 ## Opções
 - [BulkInsertOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs): `ReturnGeneratedIds`, `BatchSize`, `TimeoutSeconds`, `PreserveIdentity`, `UseInternalTransaction`, `KeepNulls`
 - [BulkUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
 - [BulkDeleteOptions](src/LLS.EFBulkExtensions/Options/BulkDeleteOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
+- [BulkInsertOrUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOrUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
 
 > Nota: `BatchSize` é respeitado pelo caminho do SQL Server (`SqlBulkCopy`). O `COPY` do PostgreSQL e o caminho linha-a-linha do SQLite não fatiam por `BatchSize`.
 
@@ -102,6 +113,7 @@ Veja [SequenceModelExtensions](src/LLS.EFBulkExtensions/Extensions/SequenceModel
   - SQLite: um `INSERT` preparado (opcionalmente `RETURNING` para IDs) executado uma vez por linha dentro de uma única transação; as linhas são percorridas em streaming, sem materializar `DataTable`.
 - Update: faz staging das linhas em tabela temporária e aplica `UPDATE` com JOIN na PK, ignorando colunas value-generated (no SQLite, `UPDATE` preparado por linha).
 - Delete: faz staging das chaves e aplica `DELETE` com JOIN na PK (no SQLite, `DELETE` preparado por linha).
+- Insert ou update (upsert), por PK: SQL Server `MERGE` (com `SET IDENTITY_INSERT` quando a PK é identity); PostgreSQL `INSERT ... ON CONFLICT (pk) DO UPDATE`; SQLite `INSERT ... ON CONFLICT(pk) DO UPDATE` por linha.
 
 O mapeamento de colunas (propriedades, tipos CLR/provider, conversões incluindo `EnumToString`, owned types e discriminador TPH) é resolvido por [DataTableBuilder.BuildColumns](src/LLS.EFBulkExtensions/Core/Internal/DataTableBuilder.cs) e consumido pelo [EntityDataReader](src/LLS.EFBulkExtensions/Core/Internal/EntityDataReader.cs) (e pelo staging em `DataTable` onde ainda é necessário).
 
@@ -126,6 +138,13 @@ dotnet test --filter "Category!=Performance"
 - [BulkInsertAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertExtensions.cs)
 - [BulkUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkUpdateExtensions.cs)
 - [BulkDeleteAsync](src/LLS.EFBulkExtensions/Extensions/BulkDeleteExtensions.cs)
+- [BulkInsertOrUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
+
+## Upsert — limitações (v1)
+- Correspondência **somente por chave primária**; os valores de PK devem estar preenchidos.
+- **Não** retorna IDs gerados.
+- PKs identity/serial: SQL Server usa `SET IDENTITY_INSERT`; colunas `GENERATED ALWAYS` no PostgreSQL usam `OVERRIDING SYSTEM VALUE`.
+- Colunas computadas/`OnAddOrUpdate` não são tratadas no ramo de insert.
 
 ## Roadmap
 Veja [ROADMAP.md](ROADMAP.md) para melhorias planejadas e limitações conhecidas.

@@ -5,7 +5,7 @@
 High-performance extensions for EF Core bulk operations: insert, update and delete with large volumes, streaming (no full in-memory copy), type conversions, owned types, TPH, and optional returning of generated IDs. Supports SQL Server, PostgreSQL and SQLite.
 
 ## Features
-- Bulk insert, update and delete via `DbContext` extension methods
+- Bulk insert, update, delete and insert-or-update (upsert) via `DbContext` extension methods
 - Streaming inserts (entities are fed directly to the provider, without materializing an intermediate `DataTable`)
 - Support for SQL Server (`SqlBulkCopy`/`MERGE`), PostgreSQL (binary `COPY`) and SQLite (prepared command per row within a transaction)
 - Optional returning of generated IDs on inserts
@@ -76,10 +76,21 @@ await context.BulkDeleteAsync(entitiesToDelete, new BulkDeleteOptions {
 });
 ```
 
+Insert or update (upsert), correlated by primary key:
+```csharp
+await context.BulkInsertOrUpdateAsync(entities, new BulkInsertOrUpdateOptions {
+    BatchSize = 10_000,
+    TimeoutSeconds = 120,
+    UseInternalTransaction = false
+});
+```
+> Upsert matches by **primary key**: rows whose PK already exists are updated, the rest are inserted. The PK values must be set on the entities. See limitations below.
+
 ## Options
 - [BulkInsertOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs): `ReturnGeneratedIds`, `BatchSize`, `TimeoutSeconds`, `PreserveIdentity`, `UseInternalTransaction`, `KeepNulls`
 - [BulkUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
 - [BulkDeleteOptions](src/LLS.EFBulkExtensions/Options/BulkDeleteOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
+- [BulkInsertOrUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOrUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
 
 > Note: `BatchSize` is honored by the SQL Server path (`SqlBulkCopy`). The PostgreSQL `COPY` and SQLite per-row paths do not chunk by `BatchSize`.
 
@@ -102,6 +113,7 @@ See [SequenceModelExtensions](src/LLS.EFBulkExtensions/Extensions/SequenceModelE
   - SQLite: a prepared `INSERT` (optionally `RETURNING` for IDs) executed once per row inside a single transaction; rows are streamed, no `DataTable` is materialized.
 - Update: stages rows into a temp table and applies `UPDATE` with a JOIN on the PK, ignoring value-generated columns (SQLite applies a prepared `UPDATE` per row).
 - Delete: stages keys and applies `DELETE` with a JOIN on the PK (SQLite applies a prepared `DELETE` per row).
+- Insert or update (upsert), matched by PK: SQL Server `MERGE` (with `SET IDENTITY_INSERT` when the PK is an identity column); PostgreSQL `INSERT ... ON CONFLICT (pk) DO UPDATE`; SQLite `INSERT ... ON CONFLICT(pk) DO UPDATE` per row.
 
 Column mapping (properties, CLR/provider types, value conversions including `EnumToString`, owned types and TPH discriminator) is resolved by [DataTableBuilder.BuildColumns](src/LLS.EFBulkExtensions/Core/Internal/DataTableBuilder.cs) and consumed by the streaming [EntityDataReader](src/LLS.EFBulkExtensions/Core/Internal/EntityDataReader.cs) (and by `DataTable` staging where still required).
 
@@ -126,6 +138,13 @@ dotnet test --filter "Category!=Performance"
 - [BulkInsertAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertExtensions.cs)
 - [BulkUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkUpdateExtensions.cs)
 - [BulkDeleteAsync](src/LLS.EFBulkExtensions/Extensions/BulkDeleteExtensions.cs)
+- [BulkInsertOrUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
+
+## Upsert — limitations (v1)
+- Match is by **primary key only**; the PK values must be present on the entities.
+- Does **not** return generated IDs.
+- Identity/serial PKs: SQL Server uses `SET IDENTITY_INSERT`; PostgreSQL `GENERATED ALWAYS` columns use `OVERRIDING SYSTEM VALUE`.
+- Computed/`OnAddOrUpdate` columns are not handled in the insert branch.
 
 ## Roadmap
 See [ROADMAP.md](ROADMAP.md) for planned improvements and known limitations.
