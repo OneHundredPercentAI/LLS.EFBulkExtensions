@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net5.0;net6.0;net7.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -11,7 +11,7 @@
     <PackageId>LLS.EFBulkExtensions</PackageId>
     <Version>1.2.0</Version>
     <Authors>LLServTec</Authors>
-    <Description>Extensões de alto desempenho para operações em massa (bulk) com EF Core 9: insert, update e delete, processamento em lotes, suporte a SQL Server e PostgreSQL, conversões e owned types, com opção de retorno de IDs gerados.</Description>
+    <Description>Extensões de alto desempenho para operações em massa (bulk) com EF Core (8, 9 e 10): insert, update e delete, processamento em lotes, suporte a SQL Server, PostgreSQL e SQLite, conversões e owned types, com opção de retorno de IDs gerados.</Description>
     <PackageTags>efcore;bulk;sqlserver;postgresql;sqlite</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -28,21 +28,6 @@
     <PackageReference Include="Npgsql" Version="8.0.3" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net5.0'">
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="5.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="5.0.0" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="6.0.0" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'net7.0'">
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="7.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="7.0.0" />
-  </ItemGroup>
-
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.0" />
@@ -57,10 +42,6 @@
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
 	</ItemGroup>
-
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net5.0' Or '$(TargetFramework)' == 'net6.0' Or '$(TargetFramework)' == 'net7.0'">
-    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
-  </PropertyGroup>
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="" />
