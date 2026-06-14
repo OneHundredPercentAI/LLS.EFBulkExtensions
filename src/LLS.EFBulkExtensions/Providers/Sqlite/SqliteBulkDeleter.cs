@@ -15,7 +15,7 @@ namespace LLS.EFBulkExtensions.Providers.Sqlite;
 
 /// <summary>
 /// Bulk delete implementation for SQLite.
-/// Uses DataTableBuilder to materialize key values and applies deletes via
+/// Uses BulkMapper to materialize key values and applies deletes via
 /// a single transaction and prepared DELETE command executed per row.
 /// </summary>
 public sealed class SqliteBulkDeleter : IBulkDeleter
@@ -29,7 +29,7 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
 
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
 
-        var (dataTable, properties) = DataTableBuilder.Build(context, entities, includeIdentity: true);
+        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
         if (dataTable.Rows.Count == 0) return;
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);

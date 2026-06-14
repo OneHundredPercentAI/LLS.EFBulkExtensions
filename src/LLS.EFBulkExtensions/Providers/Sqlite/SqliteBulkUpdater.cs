@@ -15,7 +15,7 @@ namespace LLS.EFBulkExtensions.Providers.Sqlite;
 
 /// <summary>
 /// Bulk update implementation for SQLite.
-/// Uses DataTableBuilder to materialize rows and applies updates via a single transaction
+/// Uses BulkMapper to materialize rows and applies updates via a single transaction
 /// and prepared UPDATE command executed per row.
 /// </summary>
 public sealed class SqliteBulkUpdater : IBulkUpdater
@@ -27,7 +27,7 @@ public sealed class SqliteBulkUpdater : IBulkUpdater
         var schema = entityType.GetSchema();
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
-        var (dataTable, properties) = DataTableBuilder.Build(context, entities, includeIdentity: true);
+        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
         if (dataTable.Rows.Count == 0) return;
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);

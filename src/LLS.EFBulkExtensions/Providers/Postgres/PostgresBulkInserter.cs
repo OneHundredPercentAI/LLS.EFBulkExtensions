@@ -36,7 +36,7 @@ public sealed class PostgresBulkInserter : IBulkInserter
             if (options.ReturnGeneratedIds)
             {
                 // Caminho com retorno de IDs ainda usa DataTable (correlação por coluna ordinal __ord).
-                var (dataTable, properties) = DataTableBuilder.Build(context, list, includeIdentity: includeIdentity);
+                var (dataTable, properties) = BulkMapper.Build(context, list, includeIdentity: includeIdentity);
                 var idProp = entityType.FindPrimaryKey()?.Properties.First()
                     ?? throw new InvalidOperationException($"A entidade {entityType.DisplayName()} não possui chave primária configurada.");
                 var idCol = idProp.GetColumnName(store)
@@ -120,7 +120,7 @@ RETURNING {Q(idCol!)};";
             else
             {
                 // Caminho rápido: streaming direto das entidades no COPY, sem materializar DataTable.
-                var columns = DataTableBuilder.BuildColumns(context, list, includeIdentity: includeIdentity).Columns;
+                var columns = BulkMapper.BuildColumns(context, list, includeIdentity: includeIdentity).Columns;
                 var copyCols = string.Join(", ", columns.Select(c => Q(c.ColumnName)));
                 using (var importer = await conn.BeginBinaryImportAsync($"COPY {fullDest} ({copyCols}) FROM STDIN (FORMAT BINARY)", cancellationToken))
                 {

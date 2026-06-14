@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace LLS.EFBulkExtensions.Core.Internal;
 
-public static class DataTableBuilder
+public static class BulkMapper
 {
     private class PropertyMapping
     {

@@ -7,18 +7,18 @@ namespace LLS.EFBulkExtensions.Core.Internal;
 
 /// <summary>
 /// DbDataReader que projeta uma sequência de entidades como linhas, sob demanda,
-/// usando as colunas resolvidas por <see cref="DataTableBuilder.BuildColumns{TEntity}"/>.
+/// usando as colunas resolvidas por <see cref="BulkMapper.BuildColumns{TEntity}"/>.
 /// Evita materializar um DataTable inteiro em memória durante o bulk insert.
 /// </summary>
 internal sealed class EntityDataReader<TEntity> : DbDataReader where TEntity : class
 {
-    private readonly IReadOnlyList<DataTableBuilder.BulkColumn> _columns;
+    private readonly IReadOnlyList<BulkMapper.BulkColumn> _columns;
     private readonly Dictionary<string, int> _ordinals;
     private readonly IEnumerator<TEntity> _enumerator;
     private readonly object?[] _current;
     private bool _closed;
 
-    public EntityDataReader(IEnumerable<TEntity> entities, IReadOnlyList<DataTableBuilder.BulkColumn> columns)
+    public EntityDataReader(IEnumerable<TEntity> entities, IReadOnlyList<BulkMapper.BulkColumn> columns)
     {
         _columns = columns;
         _enumerator = entities.GetEnumerator();

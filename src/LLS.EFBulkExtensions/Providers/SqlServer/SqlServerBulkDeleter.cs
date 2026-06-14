@@ -24,7 +24,7 @@ public sealed class SqlServerBulkDeleter : IBulkDeleter
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
-        var (dataTable, properties) = DataTableBuilder.Build(context, entities, includeIdentity: true);
+        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
 
         if (dataTable.Rows.Count == 0) return;
 

@@ -21,7 +21,7 @@ public sealed class PostgresBulkUpdater : IBulkUpdater
         var schema = entityType.GetSchema();
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
-        var (dataTable, properties) = DataTableBuilder.Build(context, entities, includeIdentity: true);
+        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
         if (dataTable.Rows.Count == 0) return;
 
         var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);

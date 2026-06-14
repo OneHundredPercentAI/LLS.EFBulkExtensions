@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace LLS.EFBulkExtensions.Extensions;
 
-public static class SequenceModelExtensions
+public static class ValueGenerationExtensions
 {
     internal const string ReturnGeneratedIdsAnnotation = "LLS:ReturnGeneratedIds";
 

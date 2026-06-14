@@ -40,7 +40,7 @@ public sealed class SqlServerBulkInserter : IBulkInserter
         if (options.ReturnGeneratedIds)
         {
             // Caminho com retorno de IDs ainda usa DataTable (correlação via coluna __corr no MERGE).
-            var (dataTable, properties) = DataTableBuilder.Build(context, list, includeIdentity: includeIdentity);
+            var (dataTable, properties) = BulkMapper.Build(context, list, includeIdentity: includeIdentity);
 
             var tmpName = "#tmp_bulk_" + Guid.NewGuid().ToString("N");
             string Q(string s) => "[" + s.Replace("]", "]]") + "]";
@@ -164,7 +164,7 @@ SELECT Id, corr FROM @out;";
         else
         {
             // Caminho rápido: streaming via EntityDataReader, sem materializar um DataTable.
-            var (columns, _, _) = DataTableBuilder.BuildColumns(context, list, includeIdentity: includeIdentity);
+            var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: includeIdentity);
 
             var bulkOptions = SqlBulkCopyOptions.Default;
             if (options.PreserveIdentity) bulkOptions |= SqlBulkCopyOptions.KeepIdentity;

@@ -16,7 +16,7 @@ namespace LLS.EFBulkExtensions.Providers.Sqlite;
 /// <summary>
 /// Bulk insert implementation for SQLite.
 /// Since SQLite does not expose a dedicated bulk API, this implementation:
-/// - Resolves columns with DataTableBuilder.BuildColumns (no intermediate DataTable)
+/// - Resolves columns with BulkMapper.BuildColumns (no intermediate DataTable)
 /// - Uses a single transaction (when requested) and a prepared INSERT command
 /// - Streams the entities, executing the command once per row
 /// This still yields significant gains compared to issuing separate inserts without a transaction.
@@ -40,7 +40,7 @@ public sealed class SqliteBulkInserter : IBulkInserter
         }
 
         var includeIdentity = options.PreserveIdentity;
-        var (bulkColumns, _, _) = DataTableBuilder.BuildColumns(context, list, includeIdentity: includeIdentity);
+        var (bulkColumns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: includeIdentity);
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = bulkConn.Connection;

@@ -68,14 +68,14 @@ public class StreamingMemoryTests
         // DataTable: materializa e retém todas as linhas.
         var dataTableBytes = RetainedBytes(() =>
         {
-            var (table, _) = DataTableBuilder.Build(ctx, list, includeIdentity: false);
+            var (table, _) = BulkMapper.Build(ctx, list, includeIdentity: false);
             return table;
         });
 
         // EntityDataReader: drena tudo (streaming); ao final retém apenas o reader + 1 buffer de linha.
         var readerBytes = RetainedBytes(() =>
         {
-            var (columns, _, _) = DataTableBuilder.BuildColumns(ctx, list, includeIdentity: false);
+            var (columns, _, _) = BulkMapper.BuildColumns(ctx, list, includeIdentity: false);
             var reader = new EntityDataReader<Customer>(list, columns);
             while (reader.Read())
             {
