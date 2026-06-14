@@ -2,62 +2,49 @@
 
 [English] | [Português](README.pt-BR.md)
 
-High-performance extensions for EF Core bulk operations: insert, update and delete with large volumes, batch processing, SQL Server and PostgreSQL support, type conversions, owned types, and optional returning of generated IDs.
+High-performance extensions for EF Core bulk operations: insert, update and delete with large volumes, streaming (no full in-memory copy), type conversions, owned types, TPH, and optional returning of generated IDs. Supports SQL Server, PostgreSQL and SQLite.
 
 ## Features
-- Bulk insert, update and delete via DbContext extension methods
-- Batch processing (BatchSize) and timeout control
-- Support for SQL Server (SqlBulkCopy/MERGE) and PostgreSQL (binary COPY)
+- Bulk insert, update and delete via `DbContext` extension methods
+- Streaming inserts (entities are fed directly to the provider, without materializing an intermediate `DataTable`)
+- Support for SQL Server (`SqlBulkCopy`/`MERGE`), PostgreSQL (binary `COPY`) and SQLite (prepared command per row within a transaction)
 - Optional returning of generated IDs on inserts
-- Handling properties with conversions (e.g., EnumToString) and owned types
-- Optional internal transaction and extra configuration via model annotations
+- Handling of value conversions (e.g., `EnumToString`), owned types and TPH discriminator
+- Participates in the ambient EF transaction when one is open; otherwise an optional internal transaction
 
 ## Compatibility and Dependencies
-- .NET target frameworks:
-  - net5.0, net6.0, net7.0, net8.0, net9.0, net10.0
-- EF Core (Relational) versions:
-  - 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 (matched per target framework)
+- .NET target frameworks: `net8.0`, `net9.0`, `net10.0`
+- EF Core (Relational) versions matched per target framework:
 
 | .NET TFM | EF Core Relational |
-|---------|---------------------|
-| net5.0  | 5.0.x               |
-| net6.0  | 6.0.x               |
-| net7.0  | 7.0.x               |
-| net8.0  | 8.0.x               |
-| net9.0  | 9.0.x               |
-| net10.0 | 10.0.x              |
+|----------|--------------------|
+| net8.0   | 8.0.x              |
+| net9.0   | 9.0.x              |
+| net10.0  | 10.0.x             |
 
 - Providers:
-  - SQL Server: Microsoft.Data.SqlClient
-  - PostgreSQL: Npgsql
-See project [LLS.EFBulkExtensions.csproj](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/LLS.EFBulkExtensions.csproj).
+  - SQL Server: `Microsoft.Data.SqlClient`
+  - PostgreSQL: `Npgsql`
+  - SQLite: the EF Core SQLite provider (`Microsoft.EntityFrameworkCore.Sqlite`)
+
+See [LLS.EFBulkExtensions.csproj](src/LLS.EFBulkExtensions/LLS.EFBulkExtensions.csproj).
 
 ## Installation
-- Local project: add a ProjectReference to `src/LLS.EFBulkExtensions`.
-- NuGet (if published): reference the `LLS.EFBulkExtensions` package and ensure:
+- Local project: add a `ProjectReference` to `src/LLS.EFBulkExtensions`.
+- NuGet (if published): reference the `LLS.EFBulkExtensions` package and ensure the matching EF Core provider:
   - SQL Server: `Microsoft.EntityFrameworkCore.SqlServer`
   - PostgreSQL: `Npgsql.EntityFrameworkCore.PostgreSQL`
+  - SQLite: `Microsoft.EntityFrameworkCore.Sqlite`
 
 ## Quick Start
-Import the extensions and call the methods from your DbContext:
+Import the extensions and call the methods from your `DbContext`:
 
 ```csharp
 using LLS.EFBulkExtensions.Extensions;
 using LLS.EFBulkExtensions.Options;
 ```
 
-SQL Server:
-```csharp
-var options = new DbContextOptionsBuilder<AppDbContext>()
-    .UseSqlServer("<your-connection-string>")
-    .Options;
-```
-PostgreSQL:
-```csharp
-var options = new DbContextOptionsBuilder<AppDbContext>()
-    .UseNpgsql("<your-connection-string>")
-    .Options;
-```
+The provider is resolved automatically from the `DbContext` (SQL Server, PostgreSQL or SQLite).
 
 Insert:
 ```csharp
@@ -66,9 +53,8 @@ await context.BulkInsertAsync(entities, new BulkInsertOptions {
     BatchSize = 10_000,
     TimeoutSeconds = 120,
     PreserveIdentity = false,
-    UseInternalTransaction = false,
-    KeepNulls = false,
-    UseAppLock = false
+    UseInternalTransaction = true,
+    KeepNulls = false
 });
 ```
 
@@ -91,50 +77,55 @@ await context.BulkDeleteAsync(entitiesToDelete, new BulkDeleteOptions {
 ```
 
 ## Options
-- BulkInsertOptions: [file](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs)
-  - ReturnGeneratedIds, BatchSize, TimeoutSeconds, PreserveIdentity, UseInternalTransaction, KeepNulls, UseAppLock
-- BulkUpdateOptions: [file](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs)
-  - BatchSize, TimeoutSeconds, UseInternalTransaction
-- BulkDeleteOptions: [file](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Options/BulkDeleteOptions.cs)
-  - BatchSize, TimeoutSeconds, UseInternalTransaction
+- [BulkInsertOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs): `ReturnGeneratedIds`, `BatchSize`, `TimeoutSeconds`, `PreserveIdentity`, `UseInternalTransaction`, `KeepNulls`
+- [BulkUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
+- [BulkDeleteOptions](src/LLS.EFBulkExtensions/Options/BulkDeleteOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
 
-You can also configure annotations directly on the model for insert:
+> Note: `BatchSize` is honored by the SQL Server path (`SqlBulkCopy`). The PostgreSQL `COPY` and SQLite per-row paths do not chunk by `BatchSize`.
+
+You can also enable returning generated IDs at the model level:
 ```csharp
-builder.Property(p => p.Id).ValueGeneratedOnAdd(ReturnGeneratedIds: true, BatchSize: 10000);
+builder.Property(p => p.Id).ValueGeneratedOnAdd(ReturnGeneratedIds: true);
 ```
-Extension: [SequenceModelExtensions](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Extensions/SequenceModelExtensions.cs).
+Execution options such as `BatchSize`/`TimeoutSeconds` belong to `BulkInsertOptions`, not to model annotations.
+See [SequenceModelExtensions](src/LLS.EFBulkExtensions/Extensions/SequenceModelExtensions.cs).
 
 ## Database Support
-- SQL Server: [SqlServerBulkInserter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkInserter.cs), [SqlServerBulkUpdater](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkUpdater.cs), [SqlServerBulkDeleter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkDeleter.cs)
-- PostgreSQL: [PostgresBulkInserter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkInserter.cs), [PostgresBulkUpdater](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkUpdater.cs), [PostgresBulkDeleter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkDeleter.cs)
-- SQLite (insert only): [SqliteBulkInserter](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Providers/Sqlite/SqliteBulkInserter.cs)
+- SQL Server (insert/update/delete): [Inserter](src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkInserter.cs), [Updater](src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkUpdater.cs), [Deleter](src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkDeleter.cs)
+- PostgreSQL (insert/update/delete): [Inserter](src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkInserter.cs), [Updater](src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkUpdater.cs), [Deleter](src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkDeleter.cs)
+- SQLite (insert/update/delete): [Inserter](src/LLS.EFBulkExtensions/Providers/Sqlite/SqliteBulkInserter.cs), [Updater](src/LLS.EFBulkExtensions/Providers/Sqlite/SqliteBulkUpdater.cs), [Deleter](src/LLS.EFBulkExtensions/Providers/Sqlite/SqliteBulkDeleter.cs)
 
 ## How It Works
 - Insert:
-  - SQL Server: uses SqlBulkCopy for staging and MERGE with OUTPUT when needed to return IDs.
-  - PostgreSQL: uses binary COPY; when requested, inserts into a temporary table and returns IDs via INSERT ... RETURNING.
-- Update: creates a temporary table, bulk loads into temp and applies UPDATE with JOIN on PK, ignoring ValueGenerated columns.
-- Delete: creates a temporary table and applies DELETE with JOIN on PK.
-Data construction: [DataTableBuilder](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Core/Internal/DataTableBuilder.cs) maps properties, types, conversions (includes EnumToString) and owned types.
+  - SQL Server: fast path streams the entities into `SqlBulkCopy` via a `DbDataReader`. When returning IDs, it stages into a temp table and uses `MERGE ... OUTPUT` correlated by a generated column.
+  - PostgreSQL: fast path streams the entities into a binary `COPY`. When returning IDs, it `COPY`s into a temp table and runs `INSERT ... SELECT ... ORDER BY <ordinal> RETURNING`, correlating IDs by position.
+  - SQLite: a prepared `INSERT` (optionally `RETURNING` for IDs) executed once per row inside a single transaction; rows are streamed, no `DataTable` is materialized.
+- Update: stages rows into a temp table and applies `UPDATE` with a JOIN on the PK, ignoring value-generated columns (SQLite applies a prepared `UPDATE` per row).
+- Delete: stages keys and applies `DELETE` with a JOIN on the PK (SQLite applies a prepared `DELETE` per row).
 
-## Full Examples
-- SQL Server: [BulkInsertConsoleStyleTests.cs](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/tests/LLS.EFBulkExtensions.Tests.SqlServer/BulkInsertConsoleStyleTests.cs)
-- PostgreSQL: [BulkInsertConsoleStyleTests.cs](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/tests/LLS.EFBulkExtensions.Tests.Postgres/BulkInsertConsoleStyleTests.cs)
+Column mapping (properties, CLR/provider types, value conversions including `EnumToString`, owned types and TPH discriminator) is resolved by [DataTableBuilder.BuildColumns](src/LLS.EFBulkExtensions/Core/Internal/DataTableBuilder.cs) and consumed by the streaming [EntityDataReader](src/LLS.EFBulkExtensions/Core/Internal/EntityDataReader.cs) (and by `DataTable` staging where still required).
+
+## Examples / Tests
+Deterministic test suites double as usage examples:
+- SQL Server: [SqlServerDeterministicTests.cs](tests/LLS.EFBulkExtensions.Tests.SqlServer/SqlServerDeterministicTests.cs)
+- PostgreSQL: [PostgresDeterministicTests.cs](tests/LLS.EFBulkExtensions.Tests.Postgres/PostgresDeterministicTests.cs)
+- SQLite: [BulkSqliteFunctionalTests.cs](tests/LLS.EFBulkExtensions.Tests.Sqlite/BulkSqliteFunctionalTests.cs)
+
+Run the fast (deterministic) suite, excluding the large performance harnesses:
+```
+dotnet test --filter "Category!=Performance"
+```
 
 ## Requirements
 - EF Core with correct entity mapping (table, schema, PK)
 - To return IDs on inserts:
-  - Use PK with `ValueGeneratedOnAdd` and optionally annotate `ReturnGeneratedIds` via model.
-  - Supported ID CLR types for returning generated IDs:
-    - Numeric: `long`, `int`, `short`, `byte`, `ulong`, `uint`, `ushort` (and nullable variants).
-    - `Guid` (both SQL Server and PostgreSQL).
+  - Use a PK with `ValueGeneratedOnAdd` and optionally annotate `ReturnGeneratedIds` on the model.
+  - Supported ID CLR types: numeric `long`, `int`, `short`, `byte`, `ulong`, `uint`, `ushort` (and nullable variants); `Guid` (SQL Server and PostgreSQL).
 
 ## APIs
-- Inserts: [BulkInsertAsync](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Extensions/BulkInsertExtensions.cs)
-- Updates: [BulkUpdateAsync](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Extensions/BulkUpdateExtensions.cs)
-- Deletes: [BulkDeleteAsync](file:///c:/Projetos/LLServTec/LLS.EFBulkExtensions/src/LLS.EFBulkExtensions/Extensions/BulkDeleteExtensions.cs)
+- [BulkInsertAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertExtensions.cs)
+- [BulkUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkUpdateExtensions.cs)
+- [BulkDeleteAsync](src/LLS.EFBulkExtensions/Extensions/BulkDeleteExtensions.cs)
 
-## Notes
-- BatchSize and Timeout configurable via options and annotations
-- Optional internal transaction
-- Support for PreserveIdentity and KeepNulls on insert
+## Roadmap
+See [ROADMAP.md](ROADMAP.md) for planned improvements and known limitations.
