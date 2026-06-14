@@ -22,7 +22,6 @@ public sealed class PostgresBulkInserter : IBulkInserter
         var schema = entityType.GetSchema();
         var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
         var includeIdentity = options.PreserveIdentity;
-        var (dataTable, properties) = DataTableBuilder.Build(context, list, includeIdentity: includeIdentity);
 
         var conn = (NpgsqlConnection)context.Database.GetDbConnection();
         var shouldClose = false;
@@ -36,16 +35,18 @@ public sealed class PostgresBulkInserter : IBulkInserter
         {
             string Q(string s) => "\"" + s.Replace("\"", "\"\"") + "\"";
             var store = StoreObjectIdentifier.Table(tableName, schema);
-            var idProp = entityType.FindPrimaryKey()?.Properties.First()
-                ?? throw new InvalidOperationException($"A entidade {entityType.DisplayName()} não possui chave primária configurada.");
-            var idCol = idProp.GetColumnName(store)
-                ?? throw new InvalidOperationException($"Coluna de chave primária não encontrada para a entidade {entityType.DisplayName()}.");
-            var destCols = properties.Select(p => p.GetColumnName(store)!).ToList();
-
             var fullDest = schema is null ? Q(tableName) : Q(schema) + "." + Q(tableName);
 
             if (options.ReturnGeneratedIds)
             {
+                // Caminho com retorno de IDs ainda usa DataTable (correlação por coluna ordinal __ord).
+                var (dataTable, properties) = DataTableBuilder.Build(context, list, includeIdentity: includeIdentity);
+                var idProp = entityType.FindPrimaryKey()?.Properties.First()
+                    ?? throw new InvalidOperationException($"A entidade {entityType.DisplayName()} não possui chave primária configurada.");
+                var idCol = idProp.GetColumnName(store)
+                    ?? throw new InvalidOperationException($"Coluna de chave primária não encontrada para a entidade {entityType.DisplayName()}.");
+                var destCols = properties.Select(p => p.GetColumnName(store)!).ToList();
+
                 var tmpName = "tmp_bulk_" + Guid.NewGuid().ToString("N");
                 using (var cmd = conn.CreateCommand())
                 {
@@ -122,17 +123,18 @@ RETURNING {Q(idCol!)};";
             }
             else
             {
-                // Fast path without returning IDs: COPY directly to destination
-                var copyCols = string.Join(", ", destCols.Select(Q));
+                // Caminho rápido: streaming direto das entidades no COPY, sem materializar DataTable.
+                var columns = DataTableBuilder.BuildColumns(context, list, includeIdentity: includeIdentity).Columns;
+                var copyCols = string.Join(", ", columns.Select(c => Q(c.ColumnName)));
                 using (var importer = await conn.BeginBinaryImportAsync($"COPY {fullDest} ({copyCols}) FROM STDIN (FORMAT BINARY)", cancellationToken))
                 {
-                    foreach (DataRow row in dataTable.Rows)
+                    foreach (var entity in list)
                     {
                         await importer.StartRowAsync(cancellationToken);
-                        foreach (var col in destCols)
+                        foreach (var col in columns)
                         {
-                            var v = row[col];
-                            if (v == DBNull.Value) await importer.WriteNullAsync(cancellationToken);
+                            var v = col.GetProviderValue(entity!);
+                            if (v == null) await importer.WriteNullAsync(cancellationToken);
                             else await importer.WriteAsync(v, null!, cancellationToken);
                         }
                     }
