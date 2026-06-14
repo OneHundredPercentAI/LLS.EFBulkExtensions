@@ -2,12 +2,12 @@
 
 [English] | [Português](README.pt-BR.md)
 
-High-performance extensions for EF Core bulk operations: insert, update and delete with large volumes, streaming (no full in-memory copy), type conversions, owned types, TPH, and optional returning of generated IDs. Supports SQL Server, PostgreSQL and SQLite.
+High-performance extensions for EF Core bulk operations: insert, update and delete with large volumes, streaming (no full in-memory copy), type conversions, owned types, TPH, and optional returning of generated IDs. Supports SQL Server, PostgreSQL, SQLite and MySQL/MariaDB.
 
 ## Features
 - Bulk insert, update, delete and insert-or-update (upsert) via `DbContext` extension methods
 - Streaming inserts (entities are fed directly to the provider, without materializing an intermediate `DataTable`)
-- Support for SQL Server (`SqlBulkCopy`/`MERGE`), PostgreSQL (binary `COPY`) and SQLite (prepared command per row within a transaction)
+- Support for SQL Server (`SqlBulkCopy`/`MERGE`), PostgreSQL (binary `COPY`), SQLite (prepared command per row within a transaction) and MySQL/MariaDB (`MySqlBulkCopy`)
 - Optional returning of generated IDs on inserts
 - Handling of value conversions (e.g., `EnumToString`), owned types and TPH discriminator
 - Participates in the ambient EF transaction when one is open; otherwise an optional internal transaction
@@ -26,6 +26,7 @@ High-performance extensions for EF Core bulk operations: insert, update and dele
   - SQL Server: `Microsoft.Data.SqlClient`
   - PostgreSQL: `Npgsql`
   - SQLite: the EF Core SQLite provider (`Microsoft.EntityFrameworkCore.Sqlite`)
+  - MySQL/MariaDB: `MySqlConnector` (EF provider: `Pomelo.EntityFrameworkCore.MySql`)
 
 See [LLS.EFBulkExtensions.csproj](src/LLS.EFBulkExtensions/LLS.EFBulkExtensions.csproj).
 
@@ -35,6 +36,7 @@ See [LLS.EFBulkExtensions.csproj](src/LLS.EFBulkExtensions/LLS.EFBulkExtensions.
   - SQL Server: `Microsoft.EntityFrameworkCore.SqlServer`
   - PostgreSQL: `Npgsql.EntityFrameworkCore.PostgreSQL`
   - SQLite: `Microsoft.EntityFrameworkCore.Sqlite`
+  - MySQL/MariaDB: `Pomelo.EntityFrameworkCore.MySql` (set `AllowLoadLocalInfile=true` in the connection string; the server needs `local_infile` enabled)
 
 ## Quick Start
 Import the extensions and call the methods from your `DbContext`:
@@ -105,12 +107,14 @@ See [SequenceModelExtensions](src/LLS.EFBulkExtensions/Extensions/SequenceModelE
 - SQL Server (insert/update/delete): [Inserter](src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkInserter.cs), [Updater](src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkUpdater.cs), [Deleter](src/LLS.EFBulkExtensions/Providers/SqlServer/SqlServerBulkDeleter.cs)
 - PostgreSQL (insert/update/delete): [Inserter](src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkInserter.cs), [Updater](src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkUpdater.cs), [Deleter](src/LLS.EFBulkExtensions/Providers/Postgres/PostgresBulkDeleter.cs)
 - SQLite (insert/update/delete): [Inserter](src/LLS.EFBulkExtensions/Providers/Sqlite/SqliteBulkInserter.cs), [Updater](src/LLS.EFBulkExtensions/Providers/Sqlite/SqliteBulkUpdater.cs), [Deleter](src/LLS.EFBulkExtensions/Providers/Sqlite/SqliteBulkDeleter.cs)
+- MySQL/MariaDB (insert/update/delete/upsert): [Inserter](src/LLS.EFBulkExtensions/Providers/MySql/MySqlBulkInserter.cs), [Updater](src/LLS.EFBulkExtensions/Providers/MySql/MySqlBulkUpdater.cs), [Deleter](src/LLS.EFBulkExtensions/Providers/MySql/MySqlBulkDeleter.cs), [Upserter](src/LLS.EFBulkExtensions/Providers/MySql/MySqlBulkUpserter.cs)
 
 ## How It Works
 - Insert:
   - SQL Server: fast path streams the entities into `SqlBulkCopy` via a `DbDataReader`. When returning IDs, it stages into a temp table and uses `MERGE ... OUTPUT` correlated by a generated column.
   - PostgreSQL: fast path streams the entities into a binary `COPY`. When returning IDs, it `COPY`s into a temp table and runs `INSERT ... SELECT ... ORDER BY <ordinal> RETURNING`, correlating IDs by position.
   - SQLite: a prepared `INSERT` (optionally `RETURNING` for IDs) executed once per row inside a single transaction; rows are streamed, no `DataTable` is materialized.
+  - MySQL/MariaDB: `MySqlBulkCopy` (`LOAD DATA LOCAL INFILE`) fed by the streaming reader. `ReturnGeneratedIds` is not yet supported. Update/delete stage into a `TEMPORARY TABLE` and apply `UPDATE`/`DELETE ... JOIN` on the PK; upsert uses `INSERT ... ON DUPLICATE KEY UPDATE`.
 - Update: stages rows into a temp table and applies `UPDATE` with a JOIN on the PK, ignoring value-generated columns (SQLite applies a prepared `UPDATE` per row).
 - Delete: stages keys and applies `DELETE` with a JOIN on the PK (SQLite applies a prepared `DELETE` per row).
 - Insert or update (upsert), matched by PK: SQL Server `MERGE` (with `SET IDENTITY_INSERT` when the PK is an identity column); PostgreSQL `INSERT ... ON CONFLICT (pk) DO UPDATE`; SQLite `INSERT ... ON CONFLICT(pk) DO UPDATE` per row.

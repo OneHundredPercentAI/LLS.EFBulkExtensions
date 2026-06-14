@@ -4,12 +4,18 @@ Itens planejados e limitações conhecidas. Não é compromisso de prazo — é 
 honesta do que falta e do que foi adiado conscientemente.
 
 ## Novos provedores (objetivo original)
+- [x] MySQL (Pomelo + MySqlConnector) — validado contra servidor local.
+- [~] MariaDB — coberto pelo mesmo provider do MySQL; falta validar contra servidor MariaDB.
 - [ ] Oracle
-- [ ] MySQL
-- [ ] MariaDB
 
-Hoje há suporte a SQL Server, PostgreSQL e SQLite, com insert, update, delete e
-insert-or-update (upsert).
+Hoje há suporte a SQL Server, PostgreSQL, SQLite e MySQL/MariaDB, com insert, update,
+delete e insert-or-update (upsert).
+
+### Pendências do provider MySQL
+- [ ] `ReturnGeneratedIds` (hoje lança `NotSupportedException`; exigiria INSERT multi-linha
+  com `LAST_INSERT_ID` em vez do `MySqlBulkCopy`).
+- Requisito operacional: `MySqlBulkCopy` usa `LOAD DATA LOCAL INFILE` — precisa de
+  `AllowLoadLocalInfile=true` na conexão e `local_infile` habilitado no servidor.
 
 ## Melhorias de performance
 - [ ] **Streaming do caminho `ReturnGeneratedIds`** (SQL Server e PostgreSQL).
