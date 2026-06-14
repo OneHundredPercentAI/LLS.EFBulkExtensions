@@ -28,7 +28,6 @@ public sealed class SqlServerBulkInserter : IBulkInserter
 
         var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
         var includeIdentity = options.PreserveIdentity;
-        var (dataTable, properties) = DataTableBuilder.Build(context, list, includeIdentity: includeIdentity);
 
         var conn = (SqlConnection)context.Database.GetDbConnection();
         var shouldClose = false;
@@ -44,6 +43,9 @@ public sealed class SqlServerBulkInserter : IBulkInserter
 
         if (options.ReturnGeneratedIds)
         {
+            // Caminho com retorno de IDs ainda usa DataTable (correlação via coluna __corr no MERGE).
+            var (dataTable, properties) = DataTableBuilder.Build(context, list, includeIdentity: includeIdentity);
+
             var tmpName = "#tmp_bulk_" + Guid.NewGuid().ToString("N");
             string Q(string s) => "[" + s.Replace("]", "]]") + "]";
             var dest = schema is null ? Q(tableName) : Q(schema) + "." + Q(tableName);
@@ -165,6 +167,9 @@ SELECT Id, corr FROM @out;";
         }
         else
         {
+            // Caminho rápido: streaming via EntityDataReader, sem materializar um DataTable.
+            var (columns, _, _) = DataTableBuilder.BuildColumns(context, list, includeIdentity: includeIdentity);
+
             var bulkOptions = SqlBulkCopyOptions.Default;
             if (options.PreserveIdentity) bulkOptions |= SqlBulkCopyOptions.KeepIdentity;
             if (options.UseInternalTransaction && transaction == null) bulkOptions |= SqlBulkCopyOptions.UseInternalTransaction;
@@ -177,14 +182,13 @@ SELECT Id, corr FROM @out;";
                 BulkCopyTimeout = Math.Max(0, options.TimeoutSeconds)
             };
 
-            foreach (var p in properties)
+            foreach (var column in columns)
             {
-                var store2 = StoreObjectIdentifier.Table(tableName, schema);
-                var col = p.GetColumnName(store2)!;
-                bulk.ColumnMappings.Add(col, col);
+                bulk.ColumnMappings.Add(column.ColumnName, column.ColumnName);
             }
 
-            await bulk.WriteToServerAsync(dataTable, cancellationToken);
+            using var reader = new EntityDataReader<TEntity>(list, columns);
+            await bulk.WriteToServerAsync(reader, cancellationToken);
         }
 
         if (shouldClose)

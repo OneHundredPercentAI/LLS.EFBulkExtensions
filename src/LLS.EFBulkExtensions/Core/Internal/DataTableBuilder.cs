@@ -19,9 +19,26 @@ public static class DataTableBuilder
         public bool IsEnumToString { get; set; }
     }
 
-    public static (DataTable Table, IReadOnlyList<IProperty> IncludedProperties) Build<TEntity>(DbContext context, IEnumerable<TEntity> entities, bool includeIdentity) where TEntity : class
+    /// <summary>
+    /// Coluna resolvida para bulk: nome, tipo CLR usado na coluna e um acessor que devolve
+    /// o valor já pronto para o provider (conversões/enum/default aplicados). null => DBNull.
+    /// Usado tanto pela construção de DataTable quanto pelo <see cref="EntityDataReader{TEntity}"/> (streaming).
+    /// </summary>
+    internal sealed class BulkColumn
     {
-        var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        public IProperty Property { get; init; } = null!;
+        public string ColumnName { get; init; } = null!;
+        public Type ColumnType { get; init; } = null!;
+        public Func<object, object?> GetProviderValue { get; init; } = null!;
+    }
+
+    /// <summary>
+    /// Resolve o conjunto de colunas (com acessores de valor já convertidos) para a entidade,
+    /// considerando owned types, TPH/discriminator e value converters. Não materializa linhas.
+    /// </summary>
+    internal static (IReadOnlyList<BulkColumn> Columns, string TableName, string? Schema) BuildColumns<TEntity>(
+        DbContext context, IList<TEntity> list, bool includeIdentity) where TEntity : class
+    {
         if (list.Count == 0) throw new InvalidOperationException("Não há entidades para inserir.");
 
         var fallbackType = context.Model.FindEntityType(typeof(TEntity)) ?? throw new InvalidOperationException($"Tipo de entidade {typeof(TEntity).Name} não encontrado no modelo.");
@@ -30,7 +47,7 @@ public static class DataTableBuilder
         var tableName = firstType.GetTableName() ?? throw new InvalidOperationException("Nome da tabela não encontrado no modelo para a entidade.");
         var schema = firstType.GetSchema();
         var store = StoreObjectIdentifier.Table(tableName!, schema);
-        
+
         var entityTypesUsed = new HashSet<IEntityType>();
         foreach (var e in list)
         {
@@ -63,11 +80,7 @@ public static class DataTableBuilder
             mappingsAll.Add(new PropertyMapping
             {
                 Property = discriminator,
-                ValueAccessor = _ =>
-                {
-                    // nome curto do tipo da primeira entidade, aplicado por linha abaixo
-                    return null;
-                },
+                ValueAccessor = _ => null,
                 DefaultClrValue = null,
                 MetadataDefaultValue = discriminator.GetDefaultValue(),
                 Converter = discriminator.GetValueConverter()
@@ -83,8 +96,7 @@ public static class DataTableBuilder
             if (!byColumn.ContainsKey(col)) byColumn[col] = m;
         }
 
-        var table = new DataTable(tableName);
-        
+        var columns = new List<BulkColumn>(byColumn.Count);
         foreach (var mapping in byColumn.Values)
         {
             var p = mapping.Property;
@@ -115,73 +127,77 @@ public static class DataTableBuilder
                     }
                 }
             }
-            table.Columns.Add(p.GetColumnName(store)!, colType);
+
+            var colName = p.GetColumnName(store)!;
+            var isDiscriminator = string.Equals(p.Name, "Discriminator", StringComparison.OrdinalIgnoreCase);
+
+            // Captura local para o closure
+            var rawAccessor = mapping.ValueAccessor;
+            var metadataDefault = mapping.MetadataDefaultValue;
+            var defaultClr = mapping.DefaultClrValue;
+            var isEnumToString = mapping.IsEnumToString;
+            var clrUnderlying = Nullable.GetUnderlyingType(p.ClrType) ?? p.ClrType;
+            var clrIsEnum = clrUnderlying.IsEnum;
+            var enumUnderlying = clrIsEnum ? Enum.GetUnderlyingType(clrUnderlying) : null;
+
+            Func<object, object?> getProviderValue = obj =>
+            {
+                object? value = isDiscriminator ? obj.GetType().Name : rawAccessor(obj);
+
+                if (metadataDefault != null && Equals(value, defaultClr))
+                {
+                    value = metadataDefault;
+                }
+
+                if (value == null) return null;
+                if (converter != null) return converter.ConvertToProvider(value);
+                if (isEnumToString) return value.ToString();
+                if (clrIsEnum) return Convert.ChangeType(value, enumUnderlying!);
+                return value;
+            };
+
+            columns.Add(new BulkColumn
+            {
+                Property = p,
+                ColumnName = colName,
+                ColumnType = colType,
+                GetProviderValue = getProviderValue
+            });
+        }
+
+        return (columns, tableName!, schema);
+    }
+
+    public static (DataTable Table, IReadOnlyList<IProperty> IncludedProperties) Build<TEntity>(DbContext context, IEnumerable<TEntity> entities, bool includeIdentity) where TEntity : class
+    {
+        var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+
+        var (columns, tableName, _) = BuildColumns(context, list, includeIdentity);
+
+        var table = new DataTable(tableName);
+        foreach (var column in columns)
+        {
+            table.Columns.Add(column.ColumnName, column.ColumnType);
         }
 
         foreach (var e in list)
         {
             var row = table.NewRow();
-            foreach (var mapping in byColumn.Values)
+            foreach (var column in columns)
             {
-                var p = mapping.Property;
-                object? value;
-                if (string.Equals(p.Name, "Discriminator", StringComparison.OrdinalIgnoreCase))
-                {
-                    var full = e!.GetType().Name;
-                    value = full;
-                }
-                else
-                {
-                    value = mapping.ValueAccessor(e);
-                }
-
-                if (mapping.MetadataDefaultValue != null && object.Equals(value, mapping.DefaultClrValue))
-                {
-                    value = mapping.MetadataDefaultValue;
-                }
-
-                var colName = p.GetColumnName(store)!;
-
-                if (value == null)
-                {
-                    row[colName] = DBNull.Value;
-                }
-                else
-                {
-                    if (mapping.Converter != null)
-                    {
-                        var convertedValue = mapping.Converter.ConvertToProvider(value);
-                        row[colName] = convertedValue ?? DBNull.Value;
-                    }
-                    else if (mapping.IsEnumToString)
-                    {
-                        row[colName] = value.ToString();
-                    }
-                    else
-                    {
-                        var type = Nullable.GetUnderlyingType(p.ClrType) ?? p.ClrType;
-                        if (type.IsEnum)
-                        {
-                            row[colName] = Convert.ChangeType(value, Enum.GetUnderlyingType(type));
-                        }
-                        else
-                        {
-                            row[colName] = value;
-                        }
-                    }
-                }
+                row[column.ColumnName] = column.GetProviderValue(e!) ?? DBNull.Value;
             }
             table.Rows.Add(row);
         }
 
-        return (table, byColumn.Values.Select(m => m.Property).ToList());
+        return (table, columns.Select(c => c.Property).ToList());
     }
 
     private static void CollectProperties(
-        IEntityType entityType, 
-        StoreObjectIdentifier store, 
+        IEntityType entityType,
+        StoreObjectIdentifier store,
         IKey? pk,
-        Func<object, object?> accessor, 
+        Func<object, object?> accessor,
         List<PropertyMapping> mappings,
         bool includeIdentity)
     {
@@ -202,7 +218,7 @@ public static class DataTableBuilder
             mappings.Add(new PropertyMapping
             {
                 Property = p,
-                ValueAccessor = obj => 
+                ValueAccessor = obj =>
                 {
                     var parent = accessor(obj);
                     if (parent == null) return null;
@@ -245,12 +261,12 @@ public static class DataTableBuilder
         foreach (var nav in entityType.GetNavigations())
         {
             if (!nav.TargetEntityType.IsOwned()) continue;
-            
+
             var targetTable = nav.TargetEntityType.GetTableName();
             var targetSchema = nav.TargetEntityType.GetSchema();
-            
+
             if (targetTable != store.Name || targetSchema != store.Schema) continue;
-            
+
             if (nav.PropertyInfo == null) continue;
 
             Func<object, object?> childAccessor = obj =>
