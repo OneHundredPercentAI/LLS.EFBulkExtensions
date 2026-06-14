@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace LLS.EFBulkExtensions.Tests.Sqlite;
 
+[Trait("Category", "Performance")]
 public class SQLiteTests
 {
     private static readonly int _count = 1000_000;

@@ -7,6 +7,7 @@ using System.Diagnostics;
 
 namespace LLS.EFBulkExtensions.Tests.SqlServer;
 
+[Trait("Category", "Performance")]
 public class SqlServerTests
 {
     private static readonly int _count = 1000_000;

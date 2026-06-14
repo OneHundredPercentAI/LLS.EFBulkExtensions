@@ -7,9 +7,10 @@ using System.Diagnostics;
 
 namespace LLS.EFBulkExtensions.Tests.Postgres;
 
+[Trait("Category", "Performance")]
 public class PostgresTests
 {
-    private static readonly int _count = 1000_000;
+    private static readonly int _count = 10_000_000;
     private static readonly int _batchSize = 10_000;
 
     private static DbContextOptions<TestContext>? BuildOptions()
