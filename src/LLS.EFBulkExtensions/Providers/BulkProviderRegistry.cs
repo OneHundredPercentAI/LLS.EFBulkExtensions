@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using LLS.EFBulkExtensions.Core;
+using LLS.EFBulkExtensions.Providers.MySql;
 using LLS.EFBulkExtensions.Providers.Postgres;
 using LLS.EFBulkExtensions.Providers.SqlServer;
 using LLS.EFBulkExtensions.Providers.Sqlite;
@@ -43,6 +44,14 @@ internal sealed class SqliteBulkProvider : IBulkProvider
     public IBulkUpserter Upserter { get; } = new SqliteBulkUpserter();
 }
 
+internal sealed class MySqlBulkProvider : IBulkProvider
+{
+    public IBulkInserter Inserter { get; } = new MySqlBulkInserter();
+    public IBulkUpdater Updater { get; } = new MySqlBulkUpdater();
+    public IBulkDeleter Deleter { get; } = new MySqlBulkDeleter();
+    public IBulkUpserter Upserter { get; } = new MySqlBulkUpserter();
+}
+
 /// <summary>
 /// Resolve o <see cref="IBulkProvider"/> a partir do ProviderName do EF Core.
 /// Para adicionar suporte a um novo banco, registre uma entrada aqui.
@@ -56,6 +65,7 @@ internal static class BulkProviderRegistry
             ["Microsoft.EntityFrameworkCore.SqlServer"] = new SqlServerBulkProvider(),
             ["Npgsql.EntityFrameworkCore.PostgreSQL"] = new PostgresBulkProvider(),
             ["Microsoft.EntityFrameworkCore.Sqlite"] = new SqliteBulkProvider(),
+            ["Pomelo.EntityFrameworkCore.MySql"] = new MySqlBulkProvider(),
         };
 
     public static IBulkProvider Resolve(DbContext context)

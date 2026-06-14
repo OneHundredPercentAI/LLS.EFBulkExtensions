@@ -1,3 +1,4 @@
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.2.11415.280
@@ -13,6 +14,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LLS.EFBulkExtensions.Tests.Postgres", "tests\LLS.EFBulkExtensions.Tests.Postgres\LLS.EFBulkExtensions.Tests.Postgres.csproj", "{A1B2C3D4-7777-8888-9999-AAAABBBBCCCC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LLS.EFBulkExtensions.Tests.Sqlite", "tests\LLS.EFBulkExtensions.Tests.Sqlite\LLS.EFBulkExtensions.Tests.Sqlite.csproj", "{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LLS.EFBulkExtensions.Tests.MySql", "tests\LLS.EFBulkExtensions.Tests.MySql\LLS.EFBulkExtensions.Tests.MySql.csproj", "{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -72,6 +75,18 @@ Global
 		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|x64.Build.0 = Release|Any CPU
 		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|x86.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222}.Release|x86.Build.0 = Release|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Debug|x64.Build.0 = Debug|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Debug|x86.Build.0 = Debug|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Release|x64.ActiveCfg = Release|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Release|x64.Build.0 = Release|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Release|x86.ActiveCfg = Release|Any CPU
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -81,6 +96,7 @@ Global
 		{A1B2C3D4-1111-2222-3333-444455556666} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{A1B2C3D4-7777-8888-9999-AAAABBBBCCCC} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{A1B2C3D4-DDDD-EEEE-FFFF-000011112222} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{83633E8E-5322-4AF7-BDB9-DEE10F7E3ED5} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D7F9745B-42A0-450F-88C9-2360E58D0A10}
