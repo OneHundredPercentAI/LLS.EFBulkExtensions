@@ -30,17 +30,12 @@ public sealed class SqlServerBulkInserter : IBulkInserter
         if (list.Count == 0) return;
         var includeIdentity = options.PreserveIdentity;
 
-        var conn = (SqlConnection)context.Database.GetDbConnection();
-        var shouldClose = false;
-        if (conn.State != ConnectionState.Open)
-        {
-            await conn.OpenAsync(cancellationToken);
-            shouldClose = true;
-        }
+        await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
+        var conn = (SqlConnection)bulkConn.Connection;
 
         // Quando há uma transação ambiente do EF, os comandos e o SqlBulkCopy devem participar dela;
         // caso contrário, o SqlBulkCopy lança em conexão com transação local pendente.
-        var transaction = (SqlTransaction?)context.Database.CurrentTransaction?.GetDbTransaction();
+        var transaction = (SqlTransaction?)bulkConn.AmbientTransaction;
 
         if (options.ReturnGeneratedIds)
         {
@@ -190,11 +185,6 @@ SELECT Id, corr FROM @out;";
 
             using var reader = new EntityDataReader<TEntity>(list, columns);
             await bulk.WriteToServerAsync(reader, cancellationToken);
-        }
-
-        if (shouldClose)
-        {
-            await conn.CloseAsync();
         }
     }
 }

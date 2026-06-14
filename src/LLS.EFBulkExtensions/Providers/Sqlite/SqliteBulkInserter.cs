@@ -42,18 +42,13 @@ public sealed class SqliteBulkInserter : IBulkInserter
         var includeIdentity = options.PreserveIdentity;
         var (bulkColumns, _, _) = DataTableBuilder.BuildColumns(context, list, includeIdentity: includeIdentity);
 
-        var conn = context.Database.GetDbConnection();
-        var shouldClose = false;
-        if (conn.State != ConnectionState.Open)
-        {
-            await conn.OpenAsync(cancellationToken);
-            shouldClose = true;
-        }
+        await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
+        var conn = bulkConn.Connection;
 
         // Se já existe transação ambiente (EF), participamos dela e não abrimos outra
         // (SQLite não suporta transações aninhadas). Só criamos/encerramos transação própria
         // quando não há ambiente e UseInternalTransaction está ativo.
-        var ambientTransaction = context.Database.CurrentTransaction?.GetDbTransaction();
+        var ambientTransaction = bulkConn.AmbientTransaction;
         await using var ownTransaction = ambientTransaction == null && options.UseInternalTransaction
             ? await conn.BeginTransactionAsync(cancellationToken)
             : null;
@@ -181,13 +176,6 @@ public sealed class SqliteBulkInserter : IBulkInserter
                 await ownTransaction.RollbackAsync(cancellationToken);
             }
             throw;
-        }
-        finally
-        {
-            if (shouldClose)
-            {
-                await conn.CloseAsync();
-            }
         }
     }
 }

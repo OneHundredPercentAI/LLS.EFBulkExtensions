@@ -28,15 +28,9 @@ public sealed class SqlServerBulkDeleter : IBulkDeleter
 
         if (dataTable.Rows.Count == 0) return;
 
-        var conn = (SqlConnection)context.Database.GetDbConnection();
-        var shouldClose = false;
-        if (conn.State != ConnectionState.Open)
-        {
-            await conn.OpenAsync(cancellationToken);
-            shouldClose = true;
-        }
-
-        var transaction = (SqlTransaction?)context.Database.CurrentTransaction?.GetDbTransaction();
+        await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
+        var conn = (SqlConnection)bulkConn.Connection;
+        var transaction = (SqlTransaction?)bulkConn.AmbientTransaction;
         var tempTableName = $"#TmpDelete_{Guid.NewGuid():N}";
         var fullTableName = schema == null ? $"[{tableName}]" : $"[{schema}].[{tableName}]";
 
@@ -103,11 +97,6 @@ public sealed class SqlServerBulkDeleter : IBulkDeleter
                 }
             }
             catch { }
-
-            if (shouldClose)
-            {
-                await conn.CloseAsync();
-            }
         }
     }
 }

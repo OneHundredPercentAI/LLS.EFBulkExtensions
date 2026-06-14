@@ -32,16 +32,12 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
         var (dataTable, properties) = DataTableBuilder.Build(context, entities, includeIdentity: true);
         if (dataTable.Rows.Count == 0) return;
 
-        var conn = context.Database.GetDbConnection();
-        var shouldClose = conn.State != ConnectionState.Open;
-        if (shouldClose)
-        {
-            await conn.OpenAsync(cancellationToken);
-        }
+        await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
+        var conn = bulkConn.Connection;
 
         // Participa da transação ambiente do EF se houver; só abre transação própria quando não há
         // (SQLite não suporta transações aninhadas).
-        var ambientTransaction = context.Database.CurrentTransaction?.GetDbTransaction();
+        var ambientTransaction = bulkConn.AmbientTransaction;
         await using var ownTransaction = ambientTransaction == null && options.UseInternalTransaction
             ? await conn.BeginTransactionAsync(cancellationToken)
             : null;
@@ -94,13 +90,6 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
                 await ownTransaction.RollbackAsync(cancellationToken);
             }
             throw;
-        }
-        finally
-        {
-            if (shouldClose)
-            {
-                await conn.CloseAsync();
-            }
         }
     }
 }

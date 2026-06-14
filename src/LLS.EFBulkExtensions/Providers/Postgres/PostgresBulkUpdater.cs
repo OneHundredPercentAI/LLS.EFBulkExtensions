@@ -24,9 +24,8 @@ public sealed class PostgresBulkUpdater : IBulkUpdater
         var (dataTable, properties) = DataTableBuilder.Build(context, entities, includeIdentity: true);
         if (dataTable.Rows.Count == 0) return;
 
-        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
-        var shouldClose = conn.State != System.Data.ConnectionState.Open;
-        if (shouldClose) await conn.OpenAsync(cancellationToken);
+        var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
+        var conn = (NpgsqlConnection)bulkConn.Connection;
 
         try
         {
@@ -85,7 +84,7 @@ public sealed class PostgresBulkUpdater : IBulkUpdater
         }
         finally
         {
-            if (shouldClose) await conn.CloseAsync();
+            await bulkConn.DisposeAsync();
         }
     }
 }

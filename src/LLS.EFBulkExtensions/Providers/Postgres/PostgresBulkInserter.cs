@@ -24,13 +24,8 @@ public sealed class PostgresBulkInserter : IBulkInserter
         if (list.Count == 0) return;
         var includeIdentity = options.PreserveIdentity;
 
-        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
-        var shouldClose = false;
-        if (conn.State != System.Data.ConnectionState.Open)
-        {
-            await conn.OpenAsync(cancellationToken);
-            shouldClose = true;
-        }
+        var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
+        var conn = (NpgsqlConnection)bulkConn.Connection;
 
         try
         {
@@ -145,10 +140,7 @@ RETURNING {Q(idCol!)};";
         }
         finally
         {
-            if (shouldClose)
-            {
-                await conn.CloseAsync();
-            }
+            await bulkConn.DisposeAsync();
         }
     }
 }
