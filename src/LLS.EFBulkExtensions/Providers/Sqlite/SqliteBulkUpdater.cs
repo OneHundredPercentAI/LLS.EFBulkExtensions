@@ -27,8 +27,9 @@ public sealed class SqliteBulkUpdater : IBulkUpdater
         var schema = entityType.GetSchema();
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
-        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
-        if (dataTable.Rows.Count == 0) return;
+        var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        if (list.Count == 0) return;
+        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: true);
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = bulkConn.Connection;
@@ -47,31 +48,24 @@ public sealed class SqliteBulkUpdater : IBulkUpdater
             var dest = schema is null ? Q(tableName) : Q(schema) + "." + Q(tableName);
 
             var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
-
-            var pkProps = pk.Properties.ToList();
+            var pkProps = pk.Properties;
             var pkCols = pkProps.Select(p => p.GetColumnName(store) ?? throw new InvalidOperationException($"Coluna de chave primária não encontrada para {p.Name}.")).ToList();
+            var pkColSet = new HashSet<string>(pkCols, StringComparer.Ordinal);
 
-            var updatableProps = new List<IProperty>();
-            var updatableCols = new List<string>();
-            foreach (var p in properties)
-            {
-                var colName = p.GetColumnName(store);
-                if (colName == null) continue;
-                if (pkProps.Contains(p)) continue;
-                if (p.ValueGenerated == ValueGenerated.OnAdd || p.ValueGenerated == ValueGenerated.OnUpdate) continue;
+            var colByName = columns.ToDictionary(c => c.ColumnName, StringComparer.Ordinal);
+            var pkColumns = pkCols.Select(n => colByName[n]).ToList();
+            var updatableColumns = columns
+                .Where(c => !pkColSet.Contains(c.ColumnName) && c.Property.ValueGenerated != ValueGenerated.OnAdd && c.Property.ValueGenerated != ValueGenerated.OnUpdate)
+                .ToList();
 
-                updatableProps.Add(p);
-                updatableCols.Add(colName);
-            }
-
-            if (updatableCols.Count == 0)
+            if (updatableColumns.Count == 0)
             {
                 return;
             }
 
-            // Parameters: first all updatable columns, then PK columns
-            var setFragments = updatableCols.Select((c, i) => $"{Q(c)} = @p{i}").ToArray();
-            var whereFragments = pkCols.Select((c, i) => $"{Q(c)} = @p{updatableCols.Count + i}").ToArray();
+            // Parâmetros: primeiro as colunas atualizáveis, depois as colunas de PK.
+            var setFragments = updatableColumns.Select((c, i) => $"{Q(c.ColumnName)} = @p{i}").ToArray();
+            var whereFragments = pkColumns.Select((c, i) => $"{Q(c.ColumnName)} = @p{updatableColumns.Count + i}").ToArray();
 
             var cmd = conn.CreateCommand();
             cmd.CommandText = $"UPDATE {dest} SET {string.Join(", ", setFragments)} WHERE {string.Join(" AND ", whereFragments)};";
@@ -80,7 +74,7 @@ public sealed class SqliteBulkUpdater : IBulkUpdater
                 cmd.Transaction = transaction;
             }
 
-            var totalParams = updatableCols.Count + pkCols.Count;
+            var totalParams = updatableColumns.Count + pkColumns.Count;
             for (int i = 0; i < totalParams; i++)
             {
                 var p = cmd.CreateParameter();
@@ -88,25 +82,16 @@ public sealed class SqliteBulkUpdater : IBulkUpdater
                 cmd.Parameters.Add(p);
             }
 
-            // Map data rows back to PK values from original entities when necessary
-            var pkClrTypes = pkProps.Select(p => Nullable.GetUnderlyingType(p.ClrType) ?? p.ClrType).ToArray();
-
-            foreach (DataRow row in dataTable.Rows)
+            foreach (var entity in list)
             {
-                // Updatable values
-                for (int i = 0; i < updatableCols.Count; i++)
+                for (int i = 0; i < updatableColumns.Count; i++)
                 {
-                    var v = row[updatableCols[i]];
-                    cmd.Parameters[i].Value = v ?? DBNull.Value;
+                    cmd.Parameters[i].Value = updatableColumns[i].GetProviderValue(entity!) ?? DBNull.Value;
                 }
-
-                // PK values
-                for (int i = 0; i < pkCols.Count; i++)
+                for (int i = 0; i < pkColumns.Count; i++)
                 {
-                    var v = row[pkCols[i]];
-                    cmd.Parameters[updatableCols.Count + i].Value = v ?? DBNull.Value;
+                    cmd.Parameters[updatableColumns.Count + i].Value = pkColumns[i].GetProviderValue(entity!) ?? DBNull.Value;
                 }
-
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 

@@ -21,8 +21,9 @@ public sealed class MySqlBulkUpdater : IBulkUpdater
         var schema = entityType.GetSchema();
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
-        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
-        if (dataTable.Rows.Count == 0) return;
+        var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        if (list.Count == 0) return;
+        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: true);
 
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
 
@@ -36,12 +37,12 @@ public sealed class MySqlBulkUpdater : IBulkUpdater
 
         try
         {
-            await MySqlStaging.CreateAndFillAsync(conn, transaction, fullDest, tmp, dataTable, options.TimeoutSeconds, cancellationToken);
+            await MySqlStaging.CreateAndFillAsync(conn, transaction, fullDest, tmp, columns, list, options.TimeoutSeconds, cancellationToken);
 
             var pkCols = pk.Properties.Select(p => p.GetColumnName(store)!).ToList();
-            var updateCols = properties
-                .Where(p => !pk.Properties.Contains(p) && p.ValueGenerated != ValueGenerated.OnAdd && p.ValueGenerated != ValueGenerated.OnUpdate)
-                .Select(p => p.GetColumnName(store)!)
+            var updateCols = columns
+                .Where(c => !pk.Properties.Contains(c.Property) && c.Property.ValueGenerated != ValueGenerated.OnAdd && c.Property.ValueGenerated != ValueGenerated.OnUpdate)
+                .Select(c => c.ColumnName)
                 .ToList();
 
             if (updateCols.Count > 0)

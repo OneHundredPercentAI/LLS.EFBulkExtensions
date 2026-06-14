@@ -29,8 +29,9 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
 
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
 
-        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
-        if (dataTable.Rows.Count == 0) return;
+        var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        if (list.Count == 0) return;
+        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: true);
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = bulkConn.Connection;
@@ -48,8 +49,10 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
             string Q(string s) => "\"" + s.Replace("\"", "\"\"") + "\"";
             var dest = schema is null ? Q(tableName) : Q(schema) + "." + Q(tableName);
 
-            var pkProps = pk.Properties.ToList();
+            var pkProps = pk.Properties;
             var pkCols = pkProps.Select(p => p.GetColumnName(store) ?? throw new InvalidOperationException($"Coluna de chave primária não encontrada para {p.Name}.")).ToList();
+            var colByName = columns.ToDictionary(c => c.ColumnName, StringComparer.Ordinal);
+            var pkColumns = pkCols.Select(n => colByName[n]).ToList();
 
             var whereFragments = pkCols.Select((c, i) => $"{Q(c)} = @p{i}").ToArray();
 
@@ -60,21 +63,19 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
                 cmd.Transaction = transaction;
             }
 
-            for (int i = 0; i < pkCols.Count; i++)
+            for (int i = 0; i < pkColumns.Count; i++)
             {
                 var p = cmd.CreateParameter();
                 p.ParameterName = "@p" + i;
                 cmd.Parameters.Add(p);
             }
 
-            foreach (DataRow row in dataTable.Rows)
+            foreach (var entity in list)
             {
-                for (int i = 0; i < pkCols.Count; i++)
+                for (int i = 0; i < pkColumns.Count; i++)
                 {
-                    var v = row[pkCols[i]];
-                    cmd.Parameters[i].Value = v ?? DBNull.Value;
+                    cmd.Parameters[i].Value = pkColumns[i].GetProviderValue(entity!) ?? DBNull.Value;
                 }
-
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 

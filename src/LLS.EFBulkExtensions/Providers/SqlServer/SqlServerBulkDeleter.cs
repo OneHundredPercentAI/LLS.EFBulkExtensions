@@ -24,9 +24,9 @@ public sealed class SqlServerBulkDeleter : IBulkDeleter
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
-        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
-
-        if (dataTable.Rows.Count == 0) return;
+        var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        if (list.Count == 0) return;
+        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: true);
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = (SqlConnection)bulkConn.Connection;
@@ -55,13 +55,13 @@ public sealed class SqlServerBulkDeleter : IBulkDeleter
                 bulk.BatchSize = options.BatchSize;
                 bulk.BulkCopyTimeout = options.TimeoutSeconds;
                 
-                foreach (var p in properties)
+                foreach (var column in columns)
                 {
-                    var col = p.GetColumnName(store)!;
-                    bulk.ColumnMappings.Add(col, col);
+                    bulk.ColumnMappings.Add(column.ColumnName, column.ColumnName);
                 }
 
-                await bulk.WriteToServerAsync(dataTable, cancellationToken);
+                using var reader = new EntityDataReader<TEntity>(list, columns);
+                await bulk.WriteToServerAsync(reader, cancellationToken);
             }
 
             var joinClauses = new List<string>();

@@ -21,11 +21,9 @@ public sealed class SqlServerBulkUpdater : IBulkUpdater
         var entityType = context.Model.FindEntityType(typeof(TEntity)) ?? throw new InvalidOperationException($"Tipo de entidade {typeof(TEntity).Name} não encontrado no modelo.");
         var tableName = entityType.GetTableName() ?? throw new InvalidOperationException("Nome da tabela não encontrado.");
         var schema = entityType.GetSchema();
-        var store = StoreObjectIdentifier.Table(tableName, schema);
-
-        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
-
-        if (dataTable.Rows.Count == 0) return;
+        var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        if (list.Count == 0) return;
+        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: true);
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = (SqlConnection)bulkConn.Connection;
@@ -54,13 +52,13 @@ public sealed class SqlServerBulkUpdater : IBulkUpdater
                 bulk.BatchSize = options.BatchSize;
                 bulk.BulkCopyTimeout = options.TimeoutSeconds;
 
-                foreach (var p in properties)
+                foreach (var column in columns)
                 {
-                    var col = p.GetColumnName(store)!;
-                    bulk.ColumnMappings.Add(col, col);
+                    bulk.ColumnMappings.Add(column.ColumnName, column.ColumnName);
                 }
 
-                await bulk.WriteToServerAsync(dataTable, cancellationToken);
+                using var reader = new EntityDataReader<TEntity>(list, columns);
+                await bulk.WriteToServerAsync(reader, cancellationToken);
             }
 
             var setClauses = new List<string>();
@@ -68,21 +66,16 @@ public sealed class SqlServerBulkUpdater : IBulkUpdater
             
             var pkProperties = entityType.FindPrimaryKey()?.Properties ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
 
-            foreach (var p in properties)
+            foreach (var column in columns)
             {
-                var colName = p.GetColumnName(store);
-                if (colName == null) continue;
-
-                if (pkProperties.Contains(p))
+                var colName = column.ColumnName;
+                if (pkProperties.Contains(column.Property))
                 {
                     joinClauses.Add($"T.[{colName}] = S.[{colName}]");
                 }
-                else
+                else if (column.Property.ValueGenerated != ValueGenerated.OnAdd && column.Property.ValueGenerated != ValueGenerated.OnUpdate)
                 {
-                    if (p.ValueGenerated != ValueGenerated.OnAdd && p.ValueGenerated != ValueGenerated.OnUpdate)
-                    {
-                        setClauses.Add($"T.[{colName}] = S.[{colName}]");
-                    }
+                    setClauses.Add($"T.[{colName}] = S.[{colName}]");
                 }
             }
 

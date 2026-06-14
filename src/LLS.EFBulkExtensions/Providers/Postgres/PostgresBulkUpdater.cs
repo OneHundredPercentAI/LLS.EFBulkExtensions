@@ -21,8 +21,9 @@ public sealed class PostgresBulkUpdater : IBulkUpdater
         var schema = entityType.GetSchema();
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
-        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
-        if (dataTable.Rows.Count == 0) return;
+        var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        if (list.Count == 0) return;
+        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: true);
 
         var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = (NpgsqlConnection)bulkConn.Connection;
@@ -39,17 +40,16 @@ public sealed class PostgresBulkUpdater : IBulkUpdater
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            var destCols = properties.Select(p => p.GetColumnName(store)!).ToList();
-            var copyCols = string.Join(", ", destCols.Select(Q));
+            var copyCols = string.Join(", ", columns.Select(c => Q(c.ColumnName)));
             using (var importer = await conn.BeginBinaryImportAsync($"COPY {Q(tmpName)} ({copyCols}) FROM STDIN (FORMAT BINARY)", cancellationToken))
             {
-                foreach (System.Data.DataRow row in dataTable.Rows)
+                foreach (var entity in list)
                 {
                     await importer.StartRowAsync(cancellationToken);
-                    foreach (var col in destCols)
+                    foreach (var col in columns)
                     {
-                        var v = row[col];
-                        if (v == DBNull.Value) await importer.WriteNullAsync(cancellationToken);
+                        var v = col.GetProviderValue(entity!);
+                        if (v == null) await importer.WriteNullAsync(cancellationToken);
                         else await importer.WriteAsync(v, null!, cancellationToken);
                     }
                 }
@@ -60,13 +60,11 @@ public sealed class PostgresBulkUpdater : IBulkUpdater
             var join = string.Join(" AND ", pkProps.Select(p => $"{Q("t")}.{Q(p.GetColumnName(store)!)} = {Q("s")}.{Q(p.GetColumnName(store)!)}"));
 
             var setCols = new List<string>();
-            foreach (var p in properties)
+            foreach (var col in columns)
             {
-                var colName = p.GetColumnName(store);
-                if (colName == null) continue;
-                if (pkProps.Contains(p)) continue;
-                if (p.ValueGenerated == ValueGenerated.OnAdd || p.ValueGenerated == ValueGenerated.OnUpdate) continue;
-                setCols.Add($"{Q(colName)} = {Q("s")}.{Q(colName)}");
+                if (pkProps.Contains(col.Property)) continue;
+                if (col.Property.ValueGenerated == ValueGenerated.OnAdd || col.Property.ValueGenerated == ValueGenerated.OnUpdate) continue;
+                setCols.Add($"{Q(col.ColumnName)} = {Q("s")}.{Q(col.ColumnName)}");
             }
 
             if (setCols.Count > 0)
