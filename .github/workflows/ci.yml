@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build-and-sqlite:
+    name: Build + SQLite (sem servidor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+      - name: Restore
+        run: dotnet restore
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+      - name: Test SQLite (determinístico)
+        run: dotnet test tests/LLS.EFBulkExtensions.Tests.Sqlite/LLS.EFBulkExtensions.Tests.Sqlite.csproj -c Release --no-build --filter "Category!=Performance"
+
+  integration-postgres-mysql:
+    name: Integração Postgres + MySQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: abc1234$
+          POSTGRES_DB: BulkDetTestDb
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: abc1234$
+          MYSQL_DATABASE: BulkDetTestDb
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pabc1234$"
+          --health-interval 10s --health-timeout 5s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Habilita local_infile no MySQL (necessário para MySqlBulkCopy)
+        run: mysql -h 127.0.0.1 -uroot -pabc1234$ -e "SET GLOBAL local_infile=1;"
+      - name: Test Postgres (determinístico)
+        run: dotnet test tests/LLS.EFBulkExtensions.Tests.Postgres/LLS.EFBulkExtensions.Tests.Postgres.csproj -c Release --filter "Category!=Performance"
+      - name: Test MySQL (determinístico)
+        run: dotnet test tests/LLS.EFBulkExtensions.Tests.MySql/LLS.EFBulkExtensions.Tests.MySql.csproj -c Release --filter "Category!=Performance"
+
+# Nota: o SQL Server não está no CI porque a senha de teste (abc1234$) não atende à
+# política de complexidade exigida pelo container mssql. Para incluí-lo, as connection
+# strings dos testes precisariam ser configuráveis por variável de ambiente, permitindo
+# uma senha compatível no container.
