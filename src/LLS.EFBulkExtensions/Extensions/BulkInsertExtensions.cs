@@ -1,9 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using LLS.EFBulkExtensions.Core;
 using LLS.EFBulkExtensions.Options;
-using LLS.EFBulkExtensions.Providers.SqlServer;
-using LLS.EFBulkExtensions.Providers.Sqlite;
+using LLS.EFBulkExtensions.Providers;
 
 namespace LLS.EFBulkExtensions.Extensions;
 
@@ -12,6 +10,8 @@ public static class BulkInsertExtensions
     public static Task BulkInsertAsync<TEntity>(this DbContext context, IEnumerable<TEntity> entities, BulkInsertOptions? options = null, CancellationToken cancellationToken = default) where TEntity : class
     {
         options ??= new BulkInsertOptions();
+
+        // ReturnGeneratedIds pode ser habilitado a nível de modelo (anotação na PK).
         var entityType = context.Model.FindEntityType(typeof(TEntity));
         var pk = entityType?.FindPrimaryKey();
         var idProp = pk?.Properties.Count == 1 ? pk.Properties[0] : null;
@@ -29,26 +29,6 @@ public static class BulkInsertExtensions
             };
         }
 
-        // DbGenerated/None: no client-side pre-assignment path here
-
-        var provider = context.Database.ProviderName;
-        
-        if (provider == "Microsoft.EntityFrameworkCore.SqlServer")
-        {
-            IBulkInserter inserter = new SqlServerBulkInserter();
-            return inserter.BulkInsertAsync(context, entities, options, cancellationToken);
-        }
-        if (provider == "Npgsql.EntityFrameworkCore.PostgreSQL")
-        {
-            IBulkInserter inserter = new Providers.Postgres.PostgresBulkInserter();
-            return inserter.BulkInsertAsync(context, entities, options, cancellationToken);
-        }
-        if (provider == "Microsoft.EntityFrameworkCore.Sqlite")
-        {
-            IBulkInserter inserter = new SqliteBulkInserter();
-            return inserter.BulkInsertAsync(context, entities, options, cancellationToken);
-        }
-
-        throw new System.NotSupportedException($"Provedor de banco de dados não suportado para BulkInsert: {provider}");
+        return BulkProviderRegistry.Resolve(context).Inserter.BulkInsertAsync(context, entities, options, cancellationToken);
     }
 }
