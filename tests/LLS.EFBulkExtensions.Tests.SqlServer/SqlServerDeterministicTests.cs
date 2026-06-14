@@ -68,6 +68,16 @@ public class SqlServerDeterministicTests : IAsyncLifetime
         Assert.Equal(people.Select(p => p.Id).OrderBy(x => x), dbIds);
     }
 
+    [Fact]
+    public async Task BulkInsert_EmptyCollection_DoesNothing()
+    {
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertAsync(new List<Customer>());
+
+        using var verify = new TestContext(Opts());
+        Assert.Equal(0, await verify.People.CountAsync());
+    }
+
     // --- Regressão do bug #1: BulkInsert deve participar da transação ambiente do EF ---
 
     [Fact]

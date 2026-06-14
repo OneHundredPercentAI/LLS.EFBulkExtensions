@@ -21,6 +21,7 @@ public sealed class PostgresBulkInserter : IBulkInserter
         var tableName = entityType.GetTableName() ?? throw new InvalidOperationException("Nome da tabela não encontrado (GetTableName retornou null)");
         var schema = entityType.GetSchema();
         var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        if (list.Count == 0) return;
         var includeIdentity = options.PreserveIdentity;
 
         var conn = (NpgsqlConnection)context.Database.GetDbConnection();

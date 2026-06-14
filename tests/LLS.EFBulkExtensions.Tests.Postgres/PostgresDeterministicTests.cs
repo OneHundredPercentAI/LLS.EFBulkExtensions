@@ -68,6 +68,16 @@ public class PostgresDeterministicTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task BulkInsert_EmptyCollection_DoesNothing()
+    {
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertAsync(new List<Person>());
+
+        using var verify = new TestContext(Opts());
+        Assert.Equal(0, await verify.People.CountAsync());
+    }
+
+    [Fact]
     public async Task BulkInsert_WithinTransaction_Rollback_PersistsNothing()
     {
         using (var ctx = new TestContext(Opts()))

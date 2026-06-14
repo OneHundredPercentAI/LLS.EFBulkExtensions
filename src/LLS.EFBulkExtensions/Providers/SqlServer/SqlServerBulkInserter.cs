@@ -27,6 +27,7 @@ public sealed class SqlServerBulkInserter : IBulkInserter
         var schema = entityType.GetSchema();
 
         var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
+        if (list.Count == 0) return;
         var includeIdentity = options.PreserveIdentity;
 
         var conn = (SqlConnection)context.Database.GetDbConnection();
