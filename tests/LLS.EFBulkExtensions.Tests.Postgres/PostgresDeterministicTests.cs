@@ -106,6 +106,39 @@ public class PostgresDeterministicTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task BulkInsertOrUpdate_UpdatesExisting_AndInsertsNew()
+    {
+        int[] existingIds;
+        int maxSeededId;
+        using (var seed = new TestContext(Opts()))
+        {
+            var seeded = BuildPeople(10);
+            await seed.AddRangeAsync(seeded);
+            await seed.SaveChangesAsync();
+            existingIds = seeded.Take(5).Select(s => s.Id).ToArray();
+            maxSeededId = seeded.Max(s => s.Id);
+        }
+
+        var upsert = new List<Person>();
+        foreach (var id in existingIds)
+        {
+            upsert.Add(new Person { Id = id, Name = $"Person_{id}_U", Age = 1, Status = PersonStatus.Inactive, Contato = new ContatoPerson { Email = "upd@x.com", Telefone = "0" } });
+        }
+        for (int i = 1; i <= 3; i++)
+        {
+            upsert.Add(new Person { Id = maxSeededId + i, Name = $"New_{i}", Age = 1, Status = PersonStatus.Active, Contato = new ContatoPerson { Email = $"new{i}@x.com", Telefone = "0" } });
+        }
+
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertOrUpdateAsync(upsert);
+
+        using var verify = new TestContext(Opts());
+        Assert.Equal(13, await verify.People.CountAsync());
+        Assert.Equal(5, await verify.People.Where(p => p.Name.EndsWith("_U") && p.Status == PersonStatus.Inactive).CountAsync());
+        Assert.Equal(3, await verify.People.Where(p => p.Id > maxSeededId).CountAsync());
+    }
+
+    [Fact]
     public async Task BulkUpdate_AppliesChanges()
     {
         using (var seed = new TestContext(Opts()))

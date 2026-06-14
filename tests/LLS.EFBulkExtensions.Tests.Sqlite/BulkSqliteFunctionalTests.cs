@@ -197,6 +197,52 @@ public class BulkSqliteFunctionalTests
         Assert.Equal(0, await context.People.CountAsync());
     }
 
+    [Fact]
+    public async Task BulkInsertOrUpdate_UpdatesExisting_AndInsertsNew()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var seeded = BuildCustomers(10);
+        await context.AddRangeAsync(seeded);
+        await context.SaveChangesAsync();
+
+        var upsert = new List<Customer>();
+        // 5 existentes, modificados
+        foreach (var s in seeded.Take(5))
+        {
+            upsert.Add(new Customer
+            {
+                Id = s.Id,
+                Name = s.Name + "_U",
+                Age = s.Age,
+                Status = PersonStatus.Inactive,
+                CustomerCode = s.CustomerCode,
+                Contato = new ContatoPerson { Email = "upd_" + s.Contato.Email, Telefone = s.Contato.Telefone }
+            });
+        }
+        // 3 novos, com IDs explícitos
+        for (int i = 0; i < 3; i++)
+        {
+            upsert.Add(new Customer
+            {
+                Id = 1001 + i,
+                Name = $"New_{i}",
+                Age = 1,
+                Status = PersonStatus.Active,
+                CustomerCode = $"N{i}",
+                Contato = new ContatoPerson { Email = $"new{i}@x.com", Telefone = "0" }
+            });
+        }
+
+        await context.BulkInsertOrUpdateAsync(upsert);
+
+        Assert.Equal(13, await context.People.CountAsync());
+        Assert.Equal(5, await context.People.Where(p => p.Name.EndsWith("_U") && p.Status == PersonStatus.Inactive).CountAsync());
+        Assert.Equal(3, await context.People.Where(p => p.Id >= 1001).CountAsync());
+    }
+
     // --- Transação ambiente do EF (mesma classe de bug do SQL Server) ---
 
     [Fact]

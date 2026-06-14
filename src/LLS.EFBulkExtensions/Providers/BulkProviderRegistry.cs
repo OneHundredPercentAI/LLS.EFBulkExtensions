@@ -16,6 +16,7 @@ internal interface IBulkProvider
     IBulkInserter Inserter { get; }
     IBulkUpdater Updater { get; }
     IBulkDeleter Deleter { get; }
+    IBulkUpserter Upserter { get; }
 }
 
 internal sealed class SqlServerBulkProvider : IBulkProvider
@@ -23,6 +24,7 @@ internal sealed class SqlServerBulkProvider : IBulkProvider
     public IBulkInserter Inserter { get; } = new SqlServerBulkInserter();
     public IBulkUpdater Updater { get; } = new SqlServerBulkUpdater();
     public IBulkDeleter Deleter { get; } = new SqlServerBulkDeleter();
+    public IBulkUpserter Upserter { get; } = new SqlServerBulkUpserter();
 }
 
 internal sealed class PostgresBulkProvider : IBulkProvider
@@ -30,6 +32,7 @@ internal sealed class PostgresBulkProvider : IBulkProvider
     public IBulkInserter Inserter { get; } = new PostgresBulkInserter();
     public IBulkUpdater Updater { get; } = new PostgresBulkUpdater();
     public IBulkDeleter Deleter { get; } = new PostgresBulkDeleter();
+    public IBulkUpserter Upserter { get; } = new PostgresBulkUpserter();
 }
 
 internal sealed class SqliteBulkProvider : IBulkProvider
@@ -37,6 +40,7 @@ internal sealed class SqliteBulkProvider : IBulkProvider
     public IBulkInserter Inserter { get; } = new SqliteBulkInserter();
     public IBulkUpdater Updater { get; } = new SqliteBulkUpdater();
     public IBulkDeleter Deleter { get; } = new SqliteBulkDeleter();
+    public IBulkUpserter Upserter { get; } = new SqliteBulkUpserter();
 }
 
 /// <summary>
