@@ -95,7 +95,7 @@ public sealed class SqliteBulkInserter : IBulkInserter
                 idCol = idProp!.GetColumnName(store)
                     ?? throw new InvalidOperationException($"Coluna de chave primária não encontrada para a entidade {entityType.DisplayName()}.");
 
-                idClrType = idProp.ClrType;
+                idClrType = idProp!.ClrType;
                 var underlying = Nullable.GetUnderlyingType(idClrType) ?? idClrType;
 
                 // Em SQLite, IDs autogerados típicos são inteiros; suportamos apenas conversões numéricas aqui.

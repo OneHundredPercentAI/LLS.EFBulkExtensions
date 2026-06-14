@@ -25,7 +25,6 @@ public static class BulkInsertExtensions
                 PreserveIdentity = options.PreserveIdentity,
                 UseInternalTransaction = options.UseInternalTransaction,
                 KeepNulls = options.KeepNulls,
-                UseAppLock = options.UseAppLock,
                 ReturnGeneratedIds = returnIdsAnno.Value
             };
         }

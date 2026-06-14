@@ -64,7 +64,6 @@ public class SqlServerTests
                 PreserveIdentity = false,
                 UseInternalTransaction = false,
                 KeepNulls = false,
-                UseAppLock = false,
             };
             await context.BulkInsertAsync(people, options);
             sw.Stop();

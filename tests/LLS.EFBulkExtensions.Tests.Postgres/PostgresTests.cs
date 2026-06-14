@@ -74,7 +74,6 @@ public class PostgresTests
                     PreserveIdentity = false,
                     UseInternalTransaction = false,
                     KeepNulls = false,
-                    UseAppLock = false,
                 };
                 await context.BulkInsertAsync(people, options);
                 sw.Stop();
