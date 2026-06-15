@@ -11,8 +11,8 @@
     <PackageId>LLS.EFBulkExtensions</PackageId>
     <Version>1.2.0</Version>
     <Authors>LLServTec</Authors>
-    <Description>Extensões de alto desempenho para operações em massa (bulk) com EF Core (8, 9 e 10): insert, update e delete, processamento em lotes, suporte a SQL Server, PostgreSQL e SQLite, conversões e owned types, com opção de retorno de IDs gerados.</Description>
-    <PackageTags>efcore;bulk;sqlserver;postgresql;sqlite</PackageTags>
+    <Description>Extensões de alto desempenho para operações em massa (bulk) com EF Core (8, 9 e 10): insert, update, delete e insert-or-update (upsert), processamento em lotes, suporte a SQL Server, PostgreSQL, MySQL, MariaDB e SQLite, conversões e owned types, com opção de retorno de IDs gerados.</Description>
+    <PackageTags>efcore;bulk;bulkinsert;sqlserver;postgresql;mysql;mariadb;sqlite</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>

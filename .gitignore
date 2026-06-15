@@ -403,3 +403,7 @@ FodyWeavers.xsd
 .trae/
 nuget.key
 /nupkg/**
+# Artefato do sample de benchmark (SQLite)
+bulk_bench.db
+bulk_bench.db-shm
+bulk_bench.db-wal

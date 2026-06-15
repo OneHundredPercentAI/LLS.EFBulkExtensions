@@ -4,15 +4,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
-namespace LLS.EFBulkExtensions.Tests.MySql;
+namespace LLS.EFBulkExtensions.Tests.MariaDb;
 
 /// <summary>
-/// Testes de integração determinísticos contra um MySQL local (cobre MariaDB pelo mesmo provider).
+/// Testes de integração determinísticos contra um MariaDB local. Usa o mesmo provider
+/// (Pomelo + MySqlConnector) do MySQL — confirma que o MySqlBulkProvider atende MariaDB.
 /// </summary>
-public class MySqlDeterministicTests : IAsyncLifetime
+public class MariaDbDeterministicTests : IAsyncLifetime
 {
     private const string ConnectionString =
-        "Server=127.0.0.1;Port=3306;Database=BulkDetTestDb;User ID=root;Password=abc1234$;AllowLoadLocalInfile=true";
+        "Server=127.0.0.1;Port=3307;Database=BulkDetTestDb;User ID=root;Password=abc1234$;AllowLoadLocalInfile=true";
 
     private static readonly ServerVersion Version = ServerVersion.AutoDetect(ConnectionString);
 
@@ -85,25 +86,20 @@ public class MySqlDeterministicTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task BulkInsert_ReturnGeneratedIds_NonUnitIncrement_Throws()
+    public async Task BulkInsert_ReturnGeneratedIds_MatchesRealDbIds()
     {
-        // Com auto_increment_increment != 1, a inferência por contiguidade (LAST_INSERT_ID) seria
-        // incorreta; o provider deve falhar explicitamente em vez de gravar IDs errados.
-        using var ctx = new TestContext(Opts());
-        await ctx.Database.OpenConnectionAsync();
-        try
-        {
-            await ctx.Database.ExecuteSqlRawAsync("SET SESSION auto_increment_increment = 2;");
+        // Valida o caminho INSERT ... RETURNING do MariaDB: os IDs atribuídos às entidades
+        // devem ser exatamente os IDs reais persistidos (e contíguos com increment=1 local).
+        var people = BuildPeople(25);
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertAsync(people, new BulkInsertOptions { ReturnGeneratedIds = true });
 
-            var ex = await Assert.ThrowsAsync<NotSupportedException>(() =>
-                ctx.BulkInsertAsync(BuildPeople(5), new BulkInsertOptions { ReturnGeneratedIds = true }));
-            Assert.Contains("auto_increment_increment", ex.Message);
-        }
-        finally
-        {
-            await ctx.Database.ExecuteSqlRawAsync("SET SESSION auto_increment_increment = 1;");
-            await ctx.Database.CloseConnectionAsync();
-        }
+        using var verify = new TestContext(Opts());
+        var dbIds = await verify.People.Select(p => p.Id).OrderBy(x => x).ToListAsync();
+        var entityIds = people.Select(p => p.Id).OrderBy(x => x).ToList();
+
+        Assert.Equal(25, entityIds.Distinct().Count());
+        Assert.Equal(dbIds, entityIds);
     }
 
     [Fact]

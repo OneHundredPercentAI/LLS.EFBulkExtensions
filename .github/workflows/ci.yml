@@ -25,8 +25,8 @@ jobs:
       - name: Test SQLite (determinístico)
         run: dotnet test tests/LLS.EFBulkExtensions.Tests.Sqlite/LLS.EFBulkExtensions.Tests.Sqlite.csproj -c Release --no-build --filter "Category!=Performance"
 
-  integration-postgres-mysql:
-    name: Integração Postgres + MySQL
+  integration-postgres-mysql-mariadb:
+    name: Integração Postgres + MySQL + MariaDB
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -48,6 +48,16 @@ jobs:
         options: >-
           --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pabc1234$"
           --health-interval 10s --health-timeout 5s --health-retries 15
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: abc1234$
+          MARIADB_DATABASE: BulkDetTestDb
+        # Container expõe 3306; mapeado para 3307 no host (a suite MariaDB usa Port=3307).
+        ports: ["3307:3306"]
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s --health-timeout 5s --health-retries 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -59,6 +69,8 @@ jobs:
         run: dotnet test tests/LLS.EFBulkExtensions.Tests.Postgres/LLS.EFBulkExtensions.Tests.Postgres.csproj -c Release --filter "Category!=Performance"
       - name: Test MySQL (determinístico)
         run: dotnet test tests/LLS.EFBulkExtensions.Tests.MySql/LLS.EFBulkExtensions.Tests.MySql.csproj -c Release --filter "Category!=Performance"
+      - name: Test MariaDB (determinístico)
+        run: dotnet test tests/LLS.EFBulkExtensions.Tests.MariaDb/LLS.EFBulkExtensions.Tests.MariaDb.csproj -c Release --filter "Category!=Performance"
 
 # Nota: o SQL Server não está no CI porque a senha de teste (abc1234$) não atende à
 # política de complexidade exigida pelo container mssql. Para incluí-lo, as connection

@@ -70,22 +70,11 @@ public static class BulkMapper
             var pkEt = et.FindPrimaryKey();
             CollectProperties(et, store, pkEt, obj => obj, mappingsAll, includeIdentity);
         }
-        // Discriminator (se houver)
-        var discriminator = firstType.GetProperties()
-            .FirstOrDefault(prop =>
-                prop.GetColumnName(store) != null &&
-                string.Equals(prop.Name, "Discriminator", StringComparison.OrdinalIgnoreCase));
-        if (discriminator != null)
-        {
-            mappingsAll.Add(new PropertyMapping
-            {
-                Property = discriminator,
-                ValueAccessor = _ => null,
-                DefaultClrValue = null,
-                MetadataDefaultValue = discriminator.GetDefaultValue(),
-                Converter = discriminator.GetValueConverter()
-            });
-        }
+        // Discriminador TPH: resolvido pelos metadados do EF — honra HasValue customizado,
+        // discriminadores não-string e coluna com nome customizado. Tratado à parte (abaixo),
+        // nunca pelo nome curto do tipo CLR.
+        var discProp = firstType.FindDiscriminatorProperty();
+        var discColumn = discProp?.GetColumnName(store);
 
         // Deduplicar por coluna
         var byColumn = new Dictionary<string, PropertyMapping>(StringComparer.OrdinalIgnoreCase);
@@ -95,6 +84,10 @@ public static class BulkMapper
             if (col == null) continue;
             if (!byColumn.ContainsKey(col)) byColumn[col] = m;
         }
+
+        // A coluna do discriminador (se mapeada como propriedade) é removida daqui para ser
+        // preenchida com o valor dos metadados, não com um acessor de propriedade comum.
+        if (discColumn != null) byColumn.Remove(discColumn);
 
         var columns = new List<BulkColumn>(byColumn.Count);
         foreach (var mapping in byColumn.Values)
@@ -129,7 +122,6 @@ public static class BulkMapper
             }
 
             var colName = p.GetColumnName(store)!;
-            var isDiscriminator = string.Equals(p.Name, "Discriminator", StringComparison.OrdinalIgnoreCase);
 
             // Captura local para o closure
             var rawAccessor = mapping.ValueAccessor;
@@ -142,7 +134,7 @@ public static class BulkMapper
 
             Func<object, object?> getProviderValue = obj =>
             {
-                object? value = isDiscriminator ? obj.GetType().Name : rawAccessor(obj);
+                object? value = rawAccessor(obj);
 
                 if (metadataDefault != null && Equals(value, defaultClr))
                 {
@@ -162,6 +154,46 @@ public static class BulkMapper
                 ColumnName = colName,
                 ColumnType = colType,
                 GetProviderValue = getProviderValue
+            });
+        }
+
+        // Coluna do discriminador TPH: valor configurado no modelo, resolvido pelo tipo concreto
+        // de cada linha (honra HasValue customizado). Para a config padrão, GetDiscriminatorValue()
+        // já devolve o nome curto do tipo — mantendo o comportamento anterior.
+        if (discProp != null && discColumn != null)
+        {
+            var discConverter = discProp.GetValueConverter();
+            var valueByType = new Dictionary<Type, object?>();
+            foreach (var et in entityTypesUsed)
+            {
+                valueByType[et.ClrType] = et.GetDiscriminatorValue();
+            }
+            var defaultDiscValue = firstType.GetDiscriminatorValue();
+
+            Type discColType;
+            if (discConverter != null)
+            {
+                discColType = Nullable.GetUnderlyingType(discConverter.ProviderClrType) ?? discConverter.ProviderClrType;
+            }
+            else
+            {
+                var u = Nullable.GetUnderlyingType(discProp.ClrType) ?? discProp.ClrType;
+                discColType = u.IsEnum ? Enum.GetUnderlyingType(u) : u;
+            }
+
+            columns.Add(new BulkColumn
+            {
+                Property = discProp,
+                ColumnName = discColumn,
+                ColumnType = discColType,
+                GetProviderValue = obj =>
+                {
+                    var v = valueByType.TryGetValue(obj.GetType(), out var found) ? found : defaultDiscValue;
+                    if (v == null) return null;
+                    if (discConverter != null) return discConverter.ConvertToProvider(v);
+                    if (v is Enum) return Convert.ChangeType(v, Enum.GetUnderlyingType(v.GetType()));
+                    return v;
+                }
             });
         }
 
@@ -232,31 +264,8 @@ public static class BulkMapper
             });
         }
 
-        var discriminator = entityType.GetProperties()
-            .FirstOrDefault(prop =>
-                prop.GetColumnName(store) != null &&
-                string.Equals(prop.Name, "Discriminator", StringComparison.OrdinalIgnoreCase));
-        if (discriminator != null)
-        {
-            mappings.Add(new PropertyMapping
-            {
-                Property = discriminator,
-                ValueAccessor = _ =>
-                {
-                    var clr = Nullable.GetUnderlyingType(discriminator.ClrType) ?? discriminator.ClrType;
-                    if (clr == typeof(string))
-                    {
-                        var full = entityType.Name;
-                        var idx = full.LastIndexOf('.');
-                        return idx >= 0 ? full[(idx + 1)..] : full;
-                    }
-                    return discriminator.GetDefaultValue();
-                },
-                DefaultClrValue = null,
-                MetadataDefaultValue = discriminator.GetDefaultValue(),
-                Converter = discriminator.GetValueConverter()
-            });
-        }
+        // O discriminador TPH é tratado de forma centralizada em BuildColumns, a partir dos
+        // metadados do EF (GetDiscriminatorValue), e não aqui.
 
         foreach (var nav in entityType.GetNavigations())
         {
