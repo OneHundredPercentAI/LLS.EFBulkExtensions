@@ -71,6 +71,7 @@ public sealed class PostgresBulkUpdater : IBulkUpdater
             {
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = $"UPDATE {fullDest} AS {Q("t")} SET {string.Join(", ", setCols)} FROM {Q(tmpName)} AS {Q("s")} WHERE {join};";
+                cmd.CommandTimeout = options.TimeoutSeconds;
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 

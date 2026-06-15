@@ -22,6 +22,18 @@ delete e insert-or-update (upsert).
 - Requisito operacional: `MySqlBulkCopy` usa `LOAD DATA LOCAL INFILE` — precisa de
   `AllowLoadLocalInfile=true` na conexão e `local_infile` habilitado no servidor.
 
+## Recursos de upsert
+- [x] **`UpdateColumns` / `ExcludeUpdateColumns`** em `BulkInsertOrUpdateOptions`: controla
+  quais colunas entram no ramo de UPDATE do upsert (ex.: atualizar só `Status` sem tocar em
+  `CreatedAt`). Aceita nome da propriedade ou da coluna; nomes inexistentes lançam
+  `InvalidOperationException`. Não altera schema nem o ramo de INSERT — é só a composição do
+  comando. Válido nos 4 providers (SQL Server, PostgreSQL, MySQL/MariaDB, SQLite).
+- [x] **`BulkInsertIfNotExistsAsync`** (e `InsertIfNotExists` nas options): insere apenas as
+  chaves inexistentes, ignorando as já existentes — `ON CONFLICT DO NOTHING` (PG/SQLite),
+  `INSERT IGNORE` (MySQL/MariaDB), `MERGE ... WHEN NOT MATCHED` (SQL Server).
+- [ ] **Upsert por chave natural** (`MatchProperties`) além da PK; e **retorno de IDs**
+  no upsert. O upsert v1 correlaciona somente por PK e não retorna IDs.
+
 ## Melhorias de performance
 - [ ] **Streaming do caminho `ReturnGeneratedIds`** (SQL Server e PostgreSQL).
   Atualmente esse caminho ainda materializa um `DataTable` para o staging em tabela
@@ -31,14 +43,16 @@ delete e insert-or-update (upsert).
 - [ ] **`BatchSize` em todos os providers.** Hoje só o caminho do SQL Server
   (`SqlBulkCopy`) honra `BatchSize`. O `COPY` do PostgreSQL e o caminho linha-a-linha
   do SQLite ignoram a opção.
+- [x] **`TimeoutSeconds` honrado em todos os providers.** Antes só SQL Server e MySQL/MariaDB
+  aplicavam o timeout; agora os comandos de PostgreSQL e SQLite (insert/update/delete/upsert)
+  também o respeitam. Exceção: o `COPY` (streaming) do PostgreSQL usa o timeout da
+  connection string, não a opção por comando.
 
 ## Qualidade / API pública
 - [ ] **XML docs** (`<GenerateDocumentationFile>` + comentários `///`) na superfície
   pública (extensões, options) para melhor experiência de IntelliSense/NuGet.
 - [x] Dispatch de providers centralizado em `BulkProviderRegistry` (instâncias singleton
   stateless). Falta opcional: integração com DI (`IServiceCollection`).
-- [ ] **Upsert por chave natural** (`MatchProperties`) além da PK; e **retorno de IDs**
-  no upsert. O upsert v1 correlaciona somente por PK e não retorna IDs.
 
 ## Limitações conhecidas
 - **SQLite** não possui API de bulk nativa: insert/update/delete são executados

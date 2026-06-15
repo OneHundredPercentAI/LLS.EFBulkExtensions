@@ -88,11 +88,26 @@ await context.BulkInsertOrUpdateAsync(entities, new BulkInsertOrUpdateOptions {
 ```
 > Upsert matches by **primary key**: rows whose PK already exists are updated, the rest are inserted. The PK values must be set on the entities. See limitations below.
 
+Update only some columns (the others on existing rows are left untouched — handy to preserve `CreatedAt`):
+```csharp
+await context.BulkInsertOrUpdateAsync(entities, new BulkInsertOrUpdateOptions {
+    UpdateColumns = new[] { nameof(Order.Status), nameof(Order.UpdatedAt) }
+    // or: ExcludeUpdateColumns = new[] { nameof(Order.CreatedAt) }
+});
+```
+> `UpdateColumns`/`ExcludeUpdateColumns` accept either the property name or the column name. Unknown names throw. They only affect the UPDATE branch — never the schema and never the INSERT branch.
+
+Insert only the rows that don't exist yet (existing keys are ignored, no update):
+```csharp
+await context.BulkInsertIfNotExistsAsync(entities);
+```
+> Maps to `ON CONFLICT DO NOTHING` (PostgreSQL/SQLite), `INSERT IGNORE` (MySQL/MariaDB) or `MERGE ... WHEN NOT MATCHED` (SQL Server). Useful for idempotent imports.
+
 ## Options
 - [BulkInsertOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs): `ReturnGeneratedIds`, `BatchSize`, `TimeoutSeconds`, `PreserveIdentity`, `UseInternalTransaction`, `KeepNulls`
 - [BulkUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
 - [BulkDeleteOptions](src/LLS.EFBulkExtensions/Options/BulkDeleteOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
-- [BulkInsertOrUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOrUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
+- [BulkInsertOrUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOrUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`, `UpdateColumns`, `ExcludeUpdateColumns`, `InsertIfNotExists`
 
 > Note: `BatchSize` is honored by the SQL Server path (`SqlBulkCopy`). The PostgreSQL `COPY` and SQLite per-row paths do not chunk by `BatchSize`.
 
@@ -143,6 +158,7 @@ dotnet test --filter "Category!=Performance"
 - [BulkUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkUpdateExtensions.cs)
 - [BulkDeleteAsync](src/LLS.EFBulkExtensions/Extensions/BulkDeleteExtensions.cs)
 - [BulkInsertOrUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
+- [BulkInsertIfNotExistsAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
 
 ## Upsert — limitations (v1)
 - Match is by **primary key only**; the PK values must be present on the entities.

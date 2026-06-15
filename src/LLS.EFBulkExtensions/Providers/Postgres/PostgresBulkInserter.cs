@@ -87,6 +87,7 @@ SELECT {colsList}
 FROM {Q(tmpName)}
 ORDER BY ""__ord""
 RETURNING {Q(idCol!)};";
+                    cmd.CommandTimeout = options.TimeoutSeconds;
                     using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
                     var propInfo = idProp.PropertyInfo
                         ?? throw new InvalidOperationException($"Propriedade de chave primária {idProp.Name} não possui PropertyInfo associado.");

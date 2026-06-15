@@ -295,4 +295,109 @@ public class BulkSqliteFunctionalTests
 
         Assert.Equal(10, await context.People.CountAsync());
     }
+
+    [Fact]
+    public async Task BulkInsertOrUpdate_UpdateColumns_OnlyUpdatesListedColumns()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var seeded = BuildCustomers(5);
+        await context.AddRangeAsync(seeded);
+        await context.SaveChangesAsync();
+
+        var upsert = seeded.Select(s => new Customer
+        {
+            Id = s.Id,
+            Name = "Changed_" + s.Id,
+            Age = 999,
+            Status = PersonStatus.Inactive,
+            CustomerCode = s.CustomerCode,
+            Contato = new ContatoPerson { Email = "x@x.com", Telefone = "0" }
+        }).ToList();
+
+        await context.BulkInsertOrUpdateAsync(upsert, new BulkInsertOrUpdateOptions { UpdateColumns = new[] { nameof(Customer.Name) } });
+
+        context.ChangeTracker.Clear(); // descarta os seeds rastreados; força releitura do banco
+        var rows = await context.People.OrderBy(p => p.Id).ToListAsync();
+        Assert.All(rows, r => Assert.StartsWith("Changed_", r.Name)); // Name atualizado
+        Assert.All(rows, r => Assert.NotEqual(999, r.Age));           // Age preservado (fora de UpdateColumns)
+    }
+
+    [Fact]
+    public async Task BulkInsertOrUpdate_ExcludeUpdateColumns_KeepsExcludedColumn()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var seeded = BuildCustomers(5);
+        await context.AddRangeAsync(seeded);
+        await context.SaveChangesAsync();
+
+        var upsert = seeded.Select(s => new Customer
+        {
+            Id = s.Id,
+            Name = "Changed_" + s.Id,
+            Age = 999,
+            Status = PersonStatus.Inactive,
+            CustomerCode = s.CustomerCode,
+            Contato = new ContatoPerson { Email = "x@x.com", Telefone = "0" }
+        }).ToList();
+
+        // Exclui Age do UPDATE: Name muda, Age permanece o original.
+        await context.BulkInsertOrUpdateAsync(upsert, new BulkInsertOrUpdateOptions { ExcludeUpdateColumns = new[] { nameof(Customer.Age) } });
+
+        context.ChangeTracker.Clear(); // descarta os seeds rastreados; força releitura do banco
+        var rows = await context.People.OrderBy(p => p.Id).ToListAsync();
+        Assert.All(rows, r => Assert.StartsWith("Changed_", r.Name)); // Name atualizado (não excluído)
+        Assert.All(rows, r => Assert.NotEqual(999, r.Age));           // Age preservado (ExcludeUpdateColumns)
+    }
+
+    [Fact]
+    public async Task BulkInsertIfNotExists_KeepsExisting_InsertsNew()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var seeded = BuildCustomers(5);
+        await context.AddRangeAsync(seeded);
+        await context.SaveChangesAsync();
+
+        var batch = new List<Customer>();
+        foreach (var s in seeded)
+            batch.Add(new Customer { Id = s.Id, Name = "SHOULD_NOT_APPLY", Age = 1, Status = PersonStatus.Inactive, CustomerCode = s.CustomerCode, Contato = new ContatoPerson { Email = "x@x.com", Telefone = "0" } });
+        for (int i = 0; i < 3; i++)
+            batch.Add(new Customer { Id = 2001 + i, Name = $"New_{i}", Age = 1, Status = PersonStatus.Active, CustomerCode = $"N{i}", Contato = new ContatoPerson { Email = $"new{i}@x.com", Telefone = "0" } });
+
+        await context.BulkInsertIfNotExistsAsync(batch);
+
+        Assert.Equal(8, await context.People.CountAsync());
+        Assert.Equal(0, await context.People.Where(p => p.Name == "SHOULD_NOT_APPLY").CountAsync()); // existentes intactos
+        Assert.Equal(3, await context.People.Where(p => p.Id >= 2001).CountAsync());                 // novos inseridos
+    }
+
+    [Fact]
+    public async Task BulkInsertOrUpdate_UnknownUpdateColumn_Throws()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var seeded = BuildCustomers(2);
+        await context.AddRangeAsync(seeded);
+        await context.SaveChangesAsync();
+
+        var upsert = seeded.Select(s => new Customer
+        {
+            Id = s.Id, Name = s.Name, Age = s.Age, Status = s.Status,
+            CustomerCode = s.CustomerCode, Contato = new ContatoPerson { Email = "x@x.com", Telefone = "0" }
+        }).ToList();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            context.BulkInsertOrUpdateAsync(upsert, new BulkInsertOrUpdateOptions { UpdateColumns = new[] { "ColunaInexistente" } }));
+        Assert.Contains("ColunaInexistente", ex.Message);
+    }
 }

@@ -58,6 +58,7 @@ public sealed class SqliteBulkDeleter : IBulkDeleter
 
             var cmd = conn.CreateCommand();
             cmd.CommandText = $"DELETE FROM {dest} WHERE {string.Join(" AND ", whereFragments)};";
+            cmd.CommandTimeout = options.TimeoutSeconds;
             if (transaction != null)
             {
                 cmd.Transaction = transaction;

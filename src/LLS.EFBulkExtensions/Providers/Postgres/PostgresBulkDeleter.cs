@@ -62,6 +62,7 @@ public sealed class PostgresBulkDeleter : IBulkDeleter
             using (var cmd = conn.CreateCommand())
             {
                 cmd.CommandText = $"DELETE FROM {fullDest} AS {Q("t")} USING {Q(tmpName)} AS {Q("s")} WHERE {join};";
+                cmd.CommandTimeout = options.TimeoutSeconds;
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 

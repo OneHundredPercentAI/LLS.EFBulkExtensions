@@ -37,9 +37,16 @@ public sealed class PostgresBulkUpserter : IBulkUpserter
 
             var destCols = properties.Select(p => p.GetColumnName(store)!).ToList();
             var pkCols = pk.Properties.Select(p => p.GetColumnName(store)!).ToList();
-            var updateCols = properties
+            var updatableProps = properties
                 .Where(p => !pk.Properties.Contains(p) && p.ValueGenerated != ValueGenerated.OnAdd && p.ValueGenerated != ValueGenerated.OnUpdate)
+                .ToList();
+            var allowedUpdate = UpsertColumnResolver.ResolveUpdateColumns(
+                updatableProps.Select(p => (p.Name, p.GetColumnName(store)!)).ToList(),
+                properties.Select(p => (p.Name, p.GetColumnName(store)!)).ToList(),
+                options);
+            var updateCols = updatableProps
                 .Select(p => p.GetColumnName(store)!)
+                .Where(allowedUpdate.Contains)
                 .ToList();
 
             // GENERATED ALWAYS exige OVERRIDING SYSTEM VALUE para inserir PK explícita.
@@ -81,6 +88,7 @@ public sealed class PostgresBulkUpserter : IBulkUpserter
 INSERT INTO {fullDest} ({copyCols}) {overriding}
 SELECT {copyCols} FROM {Q(tmpName)}
 ON CONFLICT ({conflict}) {action};";
+                cmd.CommandTimeout = options.TimeoutSeconds;
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 

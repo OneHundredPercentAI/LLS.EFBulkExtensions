@@ -114,6 +114,7 @@ public sealed class SqliteBulkInserter : IBulkInserter
             cmd.CommandText = supportsReturnIds
                 ? $"INSERT INTO {dest} ({columnList}) VALUES ({valuesList}) RETURNING {Q(idCol!)};"
                 : $"INSERT INTO {dest} ({columnList}) VALUES ({valuesList});";
+            cmd.CommandTimeout = options.TimeoutSeconds;
 
             if (transaction != null)
             {

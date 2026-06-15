@@ -69,6 +69,7 @@ public sealed class SqliteBulkUpdater : IBulkUpdater
 
             var cmd = conn.CreateCommand();
             cmd.CommandText = $"UPDATE {dest} SET {string.Join(", ", setFragments)} WHERE {string.Join(" AND ", whereFragments)};";
+            cmd.CommandTimeout = options.TimeoutSeconds;
             if (transaction != null)
             {
                 cmd.Transaction = transaction;

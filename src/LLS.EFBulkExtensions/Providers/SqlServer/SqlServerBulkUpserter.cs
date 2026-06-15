@@ -69,9 +69,16 @@ public sealed class SqlServerBulkUpserter : IBulkUpserter
 
             var pkCols = pk.Properties.Select(p => p.GetColumnName(store)!).ToList();
             var insertCols = properties.Select(p => p.GetColumnName(store)!).ToList();
-            var updateCols = properties
+            var updatableProps = properties
                 .Where(p => !pk.Properties.Contains(p) && p.ValueGenerated != ValueGenerated.OnAdd && p.ValueGenerated != ValueGenerated.OnUpdate)
+                .ToList();
+            var allowedUpdate = UpsertColumnResolver.ResolveUpdateColumns(
+                updatableProps.Select(p => (p.Name, p.GetColumnName(store)!)).ToList(),
+                properties.Select(p => (p.Name, p.GetColumnName(store)!)).ToList(),
+                options);
+            var updateCols = updatableProps
                 .Select(p => p.GetColumnName(store)!)
+                .Where(allowedUpdate.Contains)
                 .ToList();
 
             var onClause = string.Join(" AND ", pkCols.Select(c => $"T.[{c}] = S.[{c}]"));

@@ -16,4 +16,25 @@ public static class BulkInsertOrUpdateExtensions
         options ??= new BulkInsertOrUpdateOptions();
         return BulkProviderRegistry.Resolve(context).Upserter.BulkInsertOrUpdateAsync(context, entities, options, cancellationToken);
     }
+
+    /// <summary>
+    /// Insere em massa apenas as linhas cuja chave primária ainda não existe; linhas já
+    /// existentes são ignoradas (nenhum UPDATE). Útil para importações idempotentes.
+    /// Mapeia para <c>ON CONFLICT DO NOTHING</c> / <c>INSERT IGNORE</c> /
+    /// <c>MERGE ... WHEN NOT MATCHED</c> conforme o provedor.
+    /// </summary>
+    public static Task BulkInsertIfNotExistsAsync<TEntity>(this DbContext context, IEnumerable<TEntity> entities, BulkInsertOrUpdateOptions? options = null, CancellationToken cancellationToken = default) where TEntity : class
+    {
+        options ??= new BulkInsertOrUpdateOptions();
+        var effective = options.InsertIfNotExists
+            ? options
+            : new BulkInsertOrUpdateOptions
+            {
+                BatchSize = options.BatchSize,
+                TimeoutSeconds = options.TimeoutSeconds,
+                UseInternalTransaction = options.UseInternalTransaction,
+                InsertIfNotExists = true,
+            };
+        return BulkProviderRegistry.Resolve(context).Upserter.BulkInsertOrUpdateAsync(context, entities, effective, cancellationToken);
+    }
 }

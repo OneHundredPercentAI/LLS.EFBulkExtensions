@@ -219,6 +219,65 @@ public class MariaDbDeterministicTests : IAsyncLifetime
         Assert.Equal(5, await verify.People.Where(p => p.Name.EndsWith("_U") && p.Status == PersonStatus.Inactive).CountAsync());
         Assert.Equal(3, await verify.People.Where(p => p.Id > maxSeededId).CountAsync());
     }
+
+    [Fact]
+    public async Task BulkInsertOrUpdate_UpdateColumns_OnlyUpdatesListedColumns()
+    {
+        int[] ids;
+        using (var seed = new TestContext(Opts()))
+        {
+            var seeded = BuildPeople(5);
+            await seed.AddRangeAsync(seeded);
+            await seed.SaveChangesAsync();
+            ids = seeded.Select(s => s.Id).ToArray();
+        }
+
+        var upsert = ids.Select(id => new Person
+        {
+            Id = id,
+            Name = "Changed_" + id,
+            Age = 999,
+            Status = PersonStatus.Inactive,
+            Contato = new ContatoPerson { Email = "x@x.com", Telefone = "0" }
+        }).ToList();
+
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertOrUpdateAsync(upsert, new BulkInsertOrUpdateOptions { UpdateColumns = new[] { nameof(Person.Name) } });
+
+        using var verify = new TestContext(Opts());
+        var rows = await verify.People.OrderBy(p => p.Id).ToListAsync();
+        Assert.All(rows, r => Assert.StartsWith("Changed_", r.Name)); // Name atualizado
+        Assert.All(rows, r => Assert.NotEqual(999, r.Age));           // Age preservado (fora de UpdateColumns)
+    }
+
+    [Fact]
+    public async Task BulkInsertIfNotExists_KeepsExisting_InsertsNew()
+    {
+        int[] existingIds;
+        int maxId;
+        using (var seed = new TestContext(Opts()))
+        {
+            var seeded = BuildPeople(5);
+            await seed.AddRangeAsync(seeded);
+            await seed.SaveChangesAsync();
+            existingIds = seeded.Select(s => s.Id).ToArray();
+            maxId = seeded.Max(s => s.Id);
+        }
+
+        var batch = new List<Person>();
+        foreach (var id in existingIds)
+            batch.Add(new Person { Id = id, Name = "SHOULD_NOT_APPLY", Age = 1, Status = PersonStatus.Inactive, Contato = new ContatoPerson { Email = "x@x.com", Telefone = "0" } });
+        for (int i = 1; i <= 3; i++)
+            batch.Add(new Person { Id = maxId + i, Name = $"New_{i}", Age = 1, Status = PersonStatus.Active, Contato = new ContatoPerson { Email = $"new{i}@x.com", Telefone = "0" } });
+
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertIfNotExistsAsync(batch);
+
+        using var verify = new TestContext(Opts());
+        Assert.Equal(8, await verify.People.CountAsync());
+        Assert.Equal(0, await verify.People.Where(p => p.Name == "SHOULD_NOT_APPLY").CountAsync()); // existentes intactos
+        Assert.Equal(3, await verify.People.Where(p => p.Id > maxId).CountAsync());                 // novos inseridos
+    }
 }
 
 public class TestContext(DbContextOptions<TestContext> options) : DbContext(options)

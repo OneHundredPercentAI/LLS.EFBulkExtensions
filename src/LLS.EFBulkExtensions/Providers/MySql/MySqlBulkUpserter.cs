@@ -38,9 +38,16 @@ public sealed class MySqlBulkUpserter : IBulkUpserter
             await MySqlStaging.CreateAndFillAsync(conn, transaction, fullDest, tmp, columns, list, options.TimeoutSeconds, cancellationToken);
 
             var insertCols = columns.Select(c => c.ColumnName).ToList();
-            var updateCols = columns
+            var updatableCols = columns
                 .Where(c => !pk.Properties.Contains(c.Property) && c.Property.ValueGenerated != ValueGenerated.OnAdd && c.Property.ValueGenerated != ValueGenerated.OnUpdate)
+                .ToList();
+            var allowedUpdate = UpsertColumnResolver.ResolveUpdateColumns(
+                updatableCols.Select(c => (c.Property.Name, c.ColumnName)).ToList(),
+                columns.Select(c => (c.Property.Name, c.ColumnName)).ToList(),
+                options);
+            var updateCols = updatableCols
                 .Select(c => c.ColumnName)
+                .Where(allowedUpdate.Contains)
                 .ToList();
 
             var colsList = string.Join(", ", insertCols.Select(Q));

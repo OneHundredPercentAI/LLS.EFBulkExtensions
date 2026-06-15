@@ -48,9 +48,16 @@ public sealed class SqliteBulkUpserter : IBulkUpserter
             var dest = schema is null ? Q(tableName) : Q(schema) + "." + Q(tableName);
 
             var pkCols = pkProps.Select(p => p.GetColumnName(store)!).ToList();
-            var updateCols = columns
+            var updatableCols = columns
                 .Where(col => !pkProps.Contains(col.Property) && col.Property.ValueGenerated != ValueGenerated.OnAdd && col.Property.ValueGenerated != ValueGenerated.OnUpdate)
+                .ToList();
+            var allowedUpdate = UpsertColumnResolver.ResolveUpdateColumns(
+                updatableCols.Select(c => (c.Property.Name, c.ColumnName)).ToList(),
+                columns.Select(c => (c.Property.Name, c.ColumnName)).ToList(),
+                options);
+            var updateCols = updatableCols
                 .Select(col => col.ColumnName)
+                .Where(allowedUpdate.Contains)
                 .ToList();
 
             var columnList = string.Join(", ", columns.Select(c => Q(c.ColumnName)));
@@ -63,6 +70,7 @@ public sealed class SqliteBulkUpserter : IBulkUpserter
 
             var cmd = conn.CreateCommand();
             cmd.CommandText = $"INSERT INTO {dest} ({columnList}) VALUES ({valuesList}) ON CONFLICT ({conflictTarget}) {action};";
+            cmd.CommandTimeout = options.TimeoutSeconds;
             if (transaction != null)
             {
                 cmd.Transaction = transaction;
