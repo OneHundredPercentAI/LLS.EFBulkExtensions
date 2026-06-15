@@ -110,6 +110,12 @@ List<Order> rows = await context.BulkReadAsync(keys);
 ```
 > Queries the keys in batches via `Contains` instead of one huge `WHERE IN`: PostgreSQL `= ANY(@array)`, SQL Server `OPENJSON`, SQLite/MySQL parameterized `IN`. Returns **detached** entities (AsNoTracking); order is not guaranteed; missing keys are simply absent. v1 supports single-column primary keys.
 
+Synchronize (mirror) a table to a set — insert new, update existing, delete the rest:
+```csharp
+await context.BulkInsertOrUpdateOrDeleteAsync(desiredRows);
+```
+> Inserts/updates by PK (reusing the upsert, including `UpdateColumns`) and **deletes every row whose PK is not in the set**, all in one transaction. An empty collection is rejected (so it can't wipe the table by accident). v1 supports single-column primary keys.
+
 ## Options
 - [BulkInsertOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs): `ReturnGeneratedIds`, `BatchSize`, `TimeoutSeconds`, `PreserveIdentity`, `UseInternalTransaction`, `KeepNulls`
 - [BulkUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
@@ -167,6 +173,7 @@ dotnet test --filter "Category!=Performance"
 - [BulkInsertOrUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
 - [BulkInsertIfNotExistsAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
 - [BulkReadAsync](src/LLS.EFBulkExtensions/Extensions/BulkReadExtensions.cs)
+- [BulkInsertOrUpdateOrDeleteAsync](src/LLS.EFBulkExtensions/Extensions/BulkSyncExtensions.cs)
 
 ## Upsert — limitations (v1)
 - Match is by **primary key only**; the PK values must be present on the entities.

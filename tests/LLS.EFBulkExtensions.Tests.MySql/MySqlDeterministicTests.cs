@@ -309,6 +309,38 @@ public class MySqlDeterministicTests : IAsyncLifetime
         Assert.Equal(existingIds.OrderBy(x => x), found.Select(f => f.Id).OrderBy(x => x));
         Assert.All(found, f => Assert.False(string.IsNullOrEmpty(f.Contato.Email))); // veio do banco (owned type)
     }
+
+    [Fact]
+    public async Task BulkInsertOrUpdateOrDelete_MirrorsTable()
+    {
+        List<Person> seeded;
+        using (var seed = new TestContext(Opts()))
+        {
+            seeded = BuildPeople(10);
+            await seed.AddRangeAsync(seeded);
+            await seed.SaveChangesAsync();
+        }
+        var maxId = seeded.Max(s => s.Id);
+        var deletedId = seeded[5].Id;
+
+        var desired = seeded.Take(3).Select(s => new Person
+        {
+            Id = s.Id, Name = "Sync_" + s.Id, Age = s.Age, Status = PersonStatus.Inactive,
+            Contato = new ContatoPerson { Email = "x@x.com", Telefone = "0" }
+        }).ToList();
+        for (int i = 1; i <= 2; i++)
+            desired.Add(new Person { Id = maxId + i, Name = $"New_{i}", Age = 1, Status = PersonStatus.Active, Contato = new ContatoPerson { Email = $"new{i}@x.com", Telefone = "0" } });
+
+        using (var ctx = new TestContext(Opts()))
+            await ctx.BulkInsertOrUpdateOrDeleteAsync(desired);
+
+        using var verify = new TestContext(Opts());
+        var all = await verify.People.OrderBy(p => p.Id).ToListAsync();
+        Assert.Equal(5, all.Count);
+        Assert.Equal(desired.Select(d => d.Id).OrderBy(x => x), all.Select(a => a.Id).OrderBy(x => x));
+        Assert.Equal(3, all.Count(a => a.Name.StartsWith("Sync_")));
+        Assert.False(await verify.People.AnyAsync(p => p.Id == deletedId));
+    }
 }
 
 public class TestContext(DbContextOptions<TestContext> options) : DbContext(options)

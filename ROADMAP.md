@@ -37,8 +37,10 @@ delete e insert-or-update (upsert).
   `IN`). Retorna entidades desanexadas; v1 só com PK de coluna única.
 - [ ] **Upsert por chave natural** (`MatchProperties`) além da PK; e **retorno de IDs**
   no upsert. O upsert v1 correlaciona somente por PK e não retorna IDs.
-- [ ] **`BulkInsertOrUpdateOrDelete`** (sincronização/espelhamento de tabela): além de inserir
-  e atualizar, remove as linhas ausentes do conjunto informado.
+- [x] **`BulkInsertOrUpdateOrDeleteAsync`** (sincronização/espelhamento de tabela): insere as
+  chaves novas, atualiza as existentes e remove as linhas cuja PK não está no conjunto. Reaproveita
+  o upsert (incl. `UpdateColumns`) e usa o `ExecuteDelete` do EF para o delete; tudo numa transação.
+  Coleção vazia é rejeitada (não apaga a tabela por acidente). v1 só com PK de coluna única.
 
 ## Melhorias de performance
 - [ ] **Streaming do caminho `ReturnGeneratedIds`** (SQL Server e PostgreSQL).

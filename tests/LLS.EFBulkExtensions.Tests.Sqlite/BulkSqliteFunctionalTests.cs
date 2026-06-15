@@ -438,4 +438,54 @@ public class BulkSqliteFunctionalTests
         var found = await context.BulkReadAsync(new List<Customer>());
         Assert.Empty(found);
     }
+
+    [Fact]
+    public async Task BulkInsertOrUpdateOrDelete_MirrorsTable()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var seeded = BuildCustomers(10);
+        await context.AddRangeAsync(seeded);
+        await context.SaveChangesAsync();
+        var maxId = seeded.Max(s => s.Id);
+        var deletedId = seeded[5].Id; // um que ficará de fora do conjunto desejado
+        context.ChangeTracker.Clear();
+
+        // Desejado: manter+atualizar os 3 primeiros, inserir 2 novos. Os demais existentes somem.
+        var desired = seeded.Take(3).Select(s => new Customer
+        {
+            Id = s.Id, Name = "Sync_" + s.Id, Age = s.Age, Status = PersonStatus.Inactive,
+            CustomerCode = s.CustomerCode, Contato = new ContatoPerson { Email = "x@x.com", Telefone = "0" }
+        }).ToList();
+        for (int i = 1; i <= 2; i++)
+            desired.Add(new Customer { Id = maxId + i, Name = $"New_{i}", Age = 1, Status = PersonStatus.Active, CustomerCode = $"N{i}", Contato = new ContatoPerson { Email = $"new{i}@x.com", Telefone = "0" } });
+
+        await context.BulkInsertOrUpdateOrDeleteAsync(desired);
+
+        context.ChangeTracker.Clear();
+        var all = await context.People.OrderBy(p => p.Id).ToListAsync();
+        Assert.Equal(5, all.Count);                                                    // 3 mantidos + 2 novos
+        Assert.Equal(desired.Select(d => d.Id).OrderBy(x => x), all.Select(a => a.Id).OrderBy(x => x));
+        Assert.Equal(3, all.Count(a => a.Name.StartsWith("Sync_")));                   // mantidos foram atualizados
+        Assert.False(await context.People.AnyAsync(p => p.Id == deletedId));           // ausentes foram apagados
+    }
+
+    [Fact]
+    public async Task BulkInsertOrUpdateOrDelete_EmptyInput_Throws()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        await context.AddRangeAsync(BuildCustomers(3));
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            context.BulkInsertOrUpdateOrDeleteAsync(new List<Customer>()));
+        // a tabela não foi tocada
+        Assert.Equal(3, await context.People.CountAsync());
+    }
 }

@@ -110,6 +110,12 @@ List<Order> rows = await context.BulkReadAsync(keys);
 ```
 > Consulta as chaves em lotes via `Contains`, sem um `WHERE IN` gigante: PostgreSQL `= ANY(@array)`, SQL Server `OPENJSON`, SQLite/MySQL `IN` parametrizado. Retorna entidades **desanexadas** (AsNoTracking); a ordem não é garantida; chaves sem correspondência simplesmente não aparecem. v1 suporta PK de coluna única.
 
+Sincronizar (espelhar) uma tabela com um conjunto — insere novos, atualiza existentes e apaga o resto:
+```csharp
+await context.BulkInsertOrUpdateOrDeleteAsync(linhasDesejadas);
+```
+> Insere/atualiza por PK (reaproveitando o upsert, incluindo `UpdateColumns`) e **apaga toda linha cuja PK não está no conjunto**, tudo numa transação. Uma coleção vazia é rejeitada (para não apagar a tabela por acidente). v1 suporta PK de coluna única.
+
 ## Opções
 - [BulkInsertOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs): `ReturnGeneratedIds`, `BatchSize`, `TimeoutSeconds`, `PreserveIdentity`, `UseInternalTransaction`, `KeepNulls`
 - [BulkUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
@@ -167,6 +173,7 @@ dotnet test --filter "Category!=Performance"
 - [BulkInsertOrUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
 - [BulkInsertIfNotExistsAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
 - [BulkReadAsync](src/LLS.EFBulkExtensions/Extensions/BulkReadExtensions.cs)
+- [BulkInsertOrUpdateOrDeleteAsync](src/LLS.EFBulkExtensions/Extensions/BulkSyncExtensions.cs)
 
 ## Upsert — limitações (v1)
 - Correspondência **somente por chave primária**; os valores de PK devem estar preenchidos.
