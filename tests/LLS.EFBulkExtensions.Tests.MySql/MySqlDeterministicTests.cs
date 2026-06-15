@@ -282,6 +282,33 @@ public class MySqlDeterministicTests : IAsyncLifetime
         Assert.Equal(0, await verify.People.Where(p => p.Name == "SHOULD_NOT_APPLY").CountAsync()); // existentes intactos
         Assert.Equal(3, await verify.People.Where(p => p.Id > maxId).CountAsync());                 // novos inseridos
     }
+
+    [Fact]
+    public async Task BulkRead_FetchesRowsByPrimaryKey()
+    {
+        int[] existingIds;
+        int maxId;
+        using (var seed = new TestContext(Opts()))
+        {
+            var seeded = BuildPeople(10);
+            await seed.AddRangeAsync(seeded);
+            await seed.SaveChangesAsync();
+            existingIds = seeded.Take(5).Select(s => s.Id).ToArray();
+            maxId = seeded.Max(s => s.Id);
+        }
+
+        // 5 chaves existentes + 2 inexistentes (ignoradas).
+        var keyEntities = existingIds.Select(id => new Person { Id = id })
+            .Concat(new[] { new Person { Id = maxId + 100 }, new Person { Id = maxId + 200 } })
+            .ToList();
+
+        using var ctx = new TestContext(Opts());
+        var found = await ctx.BulkReadAsync(keyEntities);
+
+        Assert.Equal(5, found.Count);
+        Assert.Equal(existingIds.OrderBy(x => x), found.Select(f => f.Id).OrderBy(x => x));
+        Assert.All(found, f => Assert.False(string.IsNullOrEmpty(f.Contato.Email))); // veio do banco (owned type)
+    }
 }
 
 public class TestContext(DbContextOptions<TestContext> options) : DbContext(options)

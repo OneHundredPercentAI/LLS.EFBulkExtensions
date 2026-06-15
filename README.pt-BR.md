@@ -103,6 +103,13 @@ await context.BulkInsertIfNotExistsAsync(entities);
 ```
 > Mapeia para `ON CONFLICT DO NOTHING` (PostgreSQL/SQLite), `INSERT IGNORE` (MySQL/MariaDB) ou `MERGE ... WHEN NOT MATCHED` (SQL Server). Útil para importações idempotentes.
 
+Ler em massa por chave primária (só os valores de PK das entidades passadas são usados):
+```csharp
+var keys = ids.Select(id => new Order { Id = id });
+List<Order> rows = await context.BulkReadAsync(keys);
+```
+> Consulta as chaves em lotes via `Contains`, sem um `WHERE IN` gigante: PostgreSQL `= ANY(@array)`, SQL Server `OPENJSON`, SQLite/MySQL `IN` parametrizado. Retorna entidades **desanexadas** (AsNoTracking); a ordem não é garantida; chaves sem correspondência simplesmente não aparecem. v1 suporta PK de coluna única.
+
 ## Opções
 - [BulkInsertOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs): `ReturnGeneratedIds`, `BatchSize`, `TimeoutSeconds`, `PreserveIdentity`, `UseInternalTransaction`, `KeepNulls`
 - [BulkUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
@@ -159,6 +166,7 @@ dotnet test --filter "Category!=Performance"
 - [BulkDeleteAsync](src/LLS.EFBulkExtensions/Extensions/BulkDeleteExtensions.cs)
 - [BulkInsertOrUpdateAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
 - [BulkInsertIfNotExistsAsync](src/LLS.EFBulkExtensions/Extensions/BulkInsertOrUpdateExtensions.cs)
+- [BulkReadAsync](src/LLS.EFBulkExtensions/Extensions/BulkReadExtensions.cs)
 
 ## Upsert — limitações (v1)
 - Correspondência **somente por chave primária**; os valores de PK devem estar preenchidos.

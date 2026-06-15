@@ -31,8 +31,14 @@ delete e insert-or-update (upsert).
 - [x] **`BulkInsertIfNotExistsAsync`** (e `InsertIfNotExists` nas options): insere apenas as
   chaves inexistentes, ignorando as já existentes — `ON CONFLICT DO NOTHING` (PG/SQLite),
   `INSERT IGNORE` (MySQL/MariaDB), `MERGE ... WHEN NOT MATCHED` (SQL Server).
+- [x] **`BulkReadAsync`** — lê em massa por chave primária a partir de uma lista de entidades
+  (só os valores de PK importam), em lotes via `Contains`, sem `WHERE IN` gigante. O EF traduz
+  da melhor forma por provedor (PostgreSQL `= ANY(@array)`, SQL Server `OPENJSON`, SQLite/MySQL
+  `IN`). Retorna entidades desanexadas; v1 só com PK de coluna única.
 - [ ] **Upsert por chave natural** (`MatchProperties`) além da PK; e **retorno de IDs**
   no upsert. O upsert v1 correlaciona somente por PK e não retorna IDs.
+- [ ] **`BulkInsertOrUpdateOrDelete`** (sincronização/espelhamento de tabela): além de inserir
+  e atualizar, remove as linhas ausentes do conjunto informado.
 
 ## Melhorias de performance
 - [ ] **Streaming do caminho `ReturnGeneratedIds`** (SQL Server e PostgreSQL).

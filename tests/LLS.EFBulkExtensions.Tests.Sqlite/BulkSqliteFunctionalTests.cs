@@ -400,4 +400,42 @@ public class BulkSqliteFunctionalTests
             context.BulkInsertOrUpdateAsync(upsert, new BulkInsertOrUpdateOptions { UpdateColumns = new[] { "ColunaInexistente" } }));
         Assert.Contains("ColunaInexistente", ex.Message);
     }
+
+    [Fact]
+    public async Task BulkRead_FetchesRowsByPrimaryKey()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var seeded = BuildCustomers(10);
+        await context.AddRangeAsync(seeded);
+        await context.SaveChangesAsync();
+        var existingIds = seeded.Take(5).Select(s => s.Id).ToArray();
+        var maxId = seeded.Max(s => s.Id);
+        context.ChangeTracker.Clear();
+
+        // Chaves: 5 existentes + 2 inexistentes (devem ser ignoradas).
+        var keyEntities = existingIds.Select(id => new Customer { Id = id })
+            .Concat(new[] { new Customer { Id = maxId + 100 }, new Customer { Id = maxId + 200 } })
+            .ToList();
+
+        var found = await context.BulkReadAsync(keyEntities);
+
+        Assert.Equal(5, found.Count);
+        Assert.Equal(existingIds.OrderBy(x => x), found.Select(f => f.Id).OrderBy(x => x));
+        // Materialização completa (owned type) confirma que os dados vieram do banco.
+        Assert.All(found, f => Assert.False(string.IsNullOrEmpty(f.Contato.Email)));
+    }
+
+    [Fact]
+    public async Task BulkRead_EmptyInput_ReturnsEmpty()
+    {
+        var (context, connection) = await CreateContextAsync();
+        await using var _ = context;
+        await using var __ = connection;
+
+        var found = await context.BulkReadAsync(new List<Customer>());
+        Assert.Empty(found);
+    }
 }
