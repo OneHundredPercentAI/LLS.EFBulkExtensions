@@ -21,10 +21,12 @@ public sealed class PostgresBulkUpserter : IBulkUpserter
         var schema = entityType.GetSchema();
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
-        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
-        if (dataTable.Rows.Count == 0) return;
-
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
+        var matchProps = MatchKeyResolver.Resolve(entityType, options.MatchProperties);
+        var useNaturalKey = options.MatchProperties is { Count: > 0 };
+
+        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: !useNaturalKey);
+        if (dataTable.Rows.Count == 0) return;
 
         var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = (NpgsqlConnection)bulkConn.Connection;
@@ -36,9 +38,11 @@ public sealed class PostgresBulkUpserter : IBulkUpserter
             var tmpName = "tmp_upsert_" + Guid.NewGuid().ToString("N");
 
             var destCols = properties.Select(p => p.GetColumnName(store)!).ToList();
-            var pkCols = pk.Properties.Select(p => p.GetColumnName(store)!).ToList();
+            var matchCols = matchProps.Select(p => p.GetColumnName(store)!).ToList();
+            var matchColSet = new HashSet<string>(matchCols, StringComparer.Ordinal);
             var updatableProps = properties
-                .Where(p => !pk.Properties.Contains(p) && p.ValueGenerated != ValueGenerated.OnAdd && p.ValueGenerated != ValueGenerated.OnUpdate)
+                .Where(p => !matchColSet.Contains(p.GetColumnName(store)!) && !pk.Properties.Contains(p)
+                            && p.ValueGenerated != ValueGenerated.OnAdd && p.ValueGenerated != ValueGenerated.OnUpdate)
                 .ToList();
             var allowedUpdate = UpsertColumnResolver.ResolveUpdateColumns(
                 updatableProps.Select(p => (p.Name, p.GetColumnName(store)!)).ToList(),
@@ -50,7 +54,8 @@ public sealed class PostgresBulkUpserter : IBulkUpserter
                 .ToList();
 
             // GENERATED ALWAYS exige OVERRIDING SYSTEM VALUE para inserir PK explícita.
-            var overriding = pk.Properties.Any(p =>
+            // No modo chave natural a PK gerada não é inserida, então não se aplica.
+            var overriding = !useNaturalKey && pk.Properties.Any(p =>
                 string.Equals(p.FindAnnotation("Npgsql:ValueGenerationStrategy")?.Value?.ToString(), "IdentityAlwaysColumn", StringComparison.Ordinal))
                 ? "OVERRIDING SYSTEM VALUE "
                 : string.Empty;
@@ -77,7 +82,7 @@ public sealed class PostgresBulkUpserter : IBulkUpserter
                 await importer.CompleteAsync(cancellationToken);
             }
 
-            var conflict = string.Join(", ", pkCols.Select(Q));
+            var conflict = string.Join(", ", matchCols.Select(Q));
             var action = updateCols.Count > 0
                 ? $"DO UPDATE SET {string.Join(", ", updateCols.Select(c => $"{Q(c)} = EXCLUDED.{Q(c)}"))}"
                 : "DO NOTHING";

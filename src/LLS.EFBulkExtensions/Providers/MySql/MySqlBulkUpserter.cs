@@ -21,9 +21,12 @@ public sealed class MySqlBulkUpserter : IBulkUpserter
 
         var list = entities as IList<TEntity> ?? (entities is ICollection<TEntity> c ? new List<TEntity>(c) : new List<TEntity>(entities));
         if (list.Count == 0) return;
-        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: true);
 
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
+        var store = StoreObjectIdentifier.Table(tableName, schema);
+        var matchProps = MatchKeyResolver.Resolve(entityType, options.MatchProperties);
+        var useNaturalKey = options.MatchProperties is { Count: > 0 };
+        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: !useNaturalKey);
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = (MySqlConnection)bulkConn.Connection;
@@ -38,8 +41,10 @@ public sealed class MySqlBulkUpserter : IBulkUpserter
             await MySqlStaging.CreateAndFillAsync(conn, transaction, fullDest, tmp, columns, list, options.TimeoutSeconds, cancellationToken);
 
             var insertCols = columns.Select(c => c.ColumnName).ToList();
+            var matchColSet = new HashSet<string>(matchProps.Select(p => p.GetColumnName(store)!), StringComparer.Ordinal);
             var updatableCols = columns
-                .Where(c => !pk.Properties.Contains(c.Property) && c.Property.ValueGenerated != ValueGenerated.OnAdd && c.Property.ValueGenerated != ValueGenerated.OnUpdate)
+                .Where(c => !matchColSet.Contains(c.ColumnName) && !pk.Properties.Contains(c.Property)
+                            && c.Property.ValueGenerated != ValueGenerated.OnAdd && c.Property.ValueGenerated != ValueGenerated.OnUpdate)
                 .ToList();
             var allowedUpdate = UpsertColumnResolver.ResolveUpdateColumns(
                 updatableCols.Select(c => (c.Property.Name, c.ColumnName)).ToList(),

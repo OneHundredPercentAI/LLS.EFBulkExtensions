@@ -28,9 +28,10 @@ public sealed class SqliteBulkUpserter : IBulkUpserter
         if (list.Count == 0) return;
 
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
-        var pkProps = pk.Properties;
+        var matchProps = MatchKeyResolver.Resolve(entityType, options.MatchProperties);
+        var useNaturalKey = options.MatchProperties is { Count: > 0 };
 
-        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: true);
+        var (columns, _, _) = BulkMapper.BuildColumns(context, list, includeIdentity: !useNaturalKey);
         if (columns.Count == 0) return;
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
@@ -47,9 +48,13 @@ public sealed class SqliteBulkUpserter : IBulkUpserter
             string Q(string s) => "\"" + s.Replace("\"", "\"\"") + "\"";
             var dest = schema is null ? Q(tableName) : Q(schema) + "." + Q(tableName);
 
-            var pkCols = pkProps.Select(p => p.GetColumnName(store)!).ToList();
+            var matchCols = matchProps.Select(p => p.GetColumnName(store)!).ToList();
+            var matchColSet = new HashSet<string>(matchCols, StringComparer.Ordinal);
             var updatableCols = columns
-                .Where(col => !pkProps.Contains(col.Property) && col.Property.ValueGenerated != ValueGenerated.OnAdd && col.Property.ValueGenerated != ValueGenerated.OnUpdate)
+                .Where(col => !matchColSet.Contains(col.ColumnName)
+                              && !pk.Properties.Contains(col.Property)
+                              && col.Property.ValueGenerated != ValueGenerated.OnAdd
+                              && col.Property.ValueGenerated != ValueGenerated.OnUpdate)
                 .ToList();
             var allowedUpdate = UpsertColumnResolver.ResolveUpdateColumns(
                 updatableCols.Select(c => (c.Property.Name, c.ColumnName)).ToList(),
@@ -63,7 +68,7 @@ public sealed class SqliteBulkUpserter : IBulkUpserter
             var columnList = string.Join(", ", columns.Select(c => Q(c.ColumnName)));
             var paramNames = Enumerable.Range(0, columns.Count).Select(i => "@p" + i).ToArray();
             var valuesList = string.Join(", ", paramNames);
-            var conflictTarget = string.Join(", ", pkCols.Select(Q));
+            var conflictTarget = string.Join(", ", matchCols.Select(Q));
             var action = updateCols.Count > 0
                 ? $"DO UPDATE SET {string.Join(", ", updateCols.Select(c => $"{Q(c)} = excluded.{Q(c)}"))}"
                 : "DO NOTHING";

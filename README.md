@@ -97,6 +97,14 @@ await context.BulkInsertOrUpdateAsync(entities, new BulkInsertOrUpdateOptions {
 ```
 > `UpdateColumns`/`ExcludeUpdateColumns` accept either the property name or the column name. Unknown names throw. They only affect the UPDATE branch — never the schema and never the INSERT branch.
 
+Upsert by a **natural key** instead of the primary key (the match columns must have a unique index):
+```csharp
+await context.BulkInsertOrUpdateAsync(entities, new BulkInsertOrUpdateOptions {
+    MatchProperties = new[] { nameof(Product.Sku) }
+});
+```
+> Correlates by the given columns (`ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`). The database-generated PK is not inserted (the DB generates it), and the match columns are not updated. Throws if the columns don't form a unique key.
+
 Insert only the rows that don't exist yet (existing keys are ignored, no update):
 ```csharp
 await context.BulkInsertIfNotExistsAsync(entities);
@@ -120,7 +128,8 @@ await context.BulkInsertOrUpdateOrDeleteAsync(desiredRows);
 - [BulkInsertOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOptions.cs): `ReturnGeneratedIds`, `BatchSize`, `TimeoutSeconds`, `PreserveIdentity`, `UseInternalTransaction`, `KeepNulls`
 - [BulkUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
 - [BulkDeleteOptions](src/LLS.EFBulkExtensions/Options/BulkDeleteOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`
-- [BulkInsertOrUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOrUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`, `UpdateColumns`, `ExcludeUpdateColumns`, `InsertIfNotExists`
+- [BulkInsertOrUpdateOptions](src/LLS.EFBulkExtensions/Options/BulkInsertOrUpdateOptions.cs): `BatchSize`, `TimeoutSeconds`, `UseInternalTransaction`, `UpdateColumns`, `ExcludeUpdateColumns`, `InsertIfNotExists`, `MatchProperties`
+- [BulkReadOptions](src/LLS.EFBulkExtensions/Options/BulkReadOptions.cs): `BatchSize`
 
 > Note: `BatchSize` is honored by the SQL Server path (`SqlBulkCopy`). The PostgreSQL `COPY` and SQLite per-row paths do not chunk by `BatchSize`.
 
@@ -176,7 +185,7 @@ dotnet test --filter "Category!=Performance"
 - [BulkInsertOrUpdateOrDeleteAsync](src/LLS.EFBulkExtensions/Extensions/BulkSyncExtensions.cs)
 
 ## Upsert — limitations (v1)
-- Match is by **primary key only**; the PK values must be present on the entities.
+- Match is by **primary key** (PK values required) or by a **natural key** via `MatchProperties` (which requires a unique index on those columns).
 - Does **not** return generated IDs.
 - Identity/serial PKs: SQL Server uses `SET IDENTITY_INSERT`; PostgreSQL `GENERATED ALWAYS` columns use `OVERRIDING SYSTEM VALUE`.
 - Computed/`OnAddOrUpdate` columns are not handled in the insert branch.

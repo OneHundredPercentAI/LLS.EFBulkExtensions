@@ -23,10 +23,12 @@ public sealed class SqlServerBulkUpserter : IBulkUpserter
         var schema = entityType.GetSchema();
         var store = StoreObjectIdentifier.Table(tableName, schema);
 
-        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: true);
-        if (dataTable.Rows.Count == 0) return;
-
         var pk = entityType.FindPrimaryKey() ?? throw new InvalidOperationException("Entidade não tem chave primária definida.");
+        var matchProps = MatchKeyResolver.Resolve(entityType, options.MatchProperties);
+        var useNaturalKey = options.MatchProperties is { Count: > 0 };
+
+        var (dataTable, properties) = BulkMapper.Build(context, entities, includeIdentity: !useNaturalKey);
+        if (dataTable.Rows.Count == 0) return;
 
         await using var bulkConn = await BulkConnection.OpenAsync(context, cancellationToken);
         var conn = (SqlConnection)bulkConn.Connection;
@@ -35,8 +37,9 @@ public sealed class SqlServerBulkUpserter : IBulkUpserter
         var tempTableName = $"#TmpUpsert_{Guid.NewGuid():N}";
         var fullTableName = schema == null ? $"[{tableName}]" : $"[{schema}].[{tableName}]";
 
-        // SET IDENTITY_INSERT é necessário apenas quando a PK é uma coluna IDENTITY do SQL Server.
-        var pkIsIdentity = pk.Properties.Any(p =>
+        // SET IDENTITY_INSERT só é necessário quando inserimos a PK IDENTITY explicitamente
+        // (modo por PK). No modo chave natural a PK é gerada pelo banco.
+        var pkIsIdentity = !useNaturalKey && pk.Properties.Any(p =>
             string.Equals(p.FindAnnotation("SqlServer:ValueGenerationStrategy")?.Value?.ToString(), "IdentityColumn", StringComparison.Ordinal));
 
         try
@@ -67,10 +70,12 @@ public sealed class SqlServerBulkUpserter : IBulkUpserter
                 await bulk.WriteToServerAsync(dataTable, cancellationToken);
             }
 
-            var pkCols = pk.Properties.Select(p => p.GetColumnName(store)!).ToList();
+            var matchCols = matchProps.Select(p => p.GetColumnName(store)!).ToList();
+            var matchColSet = new HashSet<string>(matchCols, StringComparer.Ordinal);
             var insertCols = properties.Select(p => p.GetColumnName(store)!).ToList();
             var updatableProps = properties
-                .Where(p => !pk.Properties.Contains(p) && p.ValueGenerated != ValueGenerated.OnAdd && p.ValueGenerated != ValueGenerated.OnUpdate)
+                .Where(p => !matchColSet.Contains(p.GetColumnName(store)!) && !pk.Properties.Contains(p)
+                            && p.ValueGenerated != ValueGenerated.OnAdd && p.ValueGenerated != ValueGenerated.OnUpdate)
                 .ToList();
             var allowedUpdate = UpsertColumnResolver.ResolveUpdateColumns(
                 updatableProps.Select(p => (p.Name, p.GetColumnName(store)!)).ToList(),
@@ -81,7 +86,7 @@ public sealed class SqlServerBulkUpserter : IBulkUpserter
                 .Where(allowedUpdate.Contains)
                 .ToList();
 
-            var onClause = string.Join(" AND ", pkCols.Select(c => $"T.[{c}] = S.[{c}]"));
+            var onClause = string.Join(" AND ", matchCols.Select(c => $"T.[{c}] = S.[{c}]"));
             var insertColsList = string.Join(", ", insertCols.Select(c => $"[{c}]"));
             var insertValsList = string.Join(", ", insertCols.Select(c => $"S.[{c}]"));
             var matchedClause = updateCols.Count > 0

@@ -30,4 +30,13 @@ public sealed class BulkInsertOrUpdateOptions
     /// <c>BulkInsertIfNotExistsAsync</c>.
     /// </summary>
     public bool InsertIfNotExists { get; init; } = false;
+
+    /// <summary>
+    /// Correlaciona por uma chave natural (nomes de propriedade) em vez da chave primária.
+    /// Essas colunas precisam ter um índice/constraint <b>ÚNICO</b> no modelo (PK, alternate key
+    /// ou índice único) — o upsert usa o mecanismo nativo (<c>ON CONFLICT</c> / <c>ON DUPLICATE
+    /// KEY</c> / <c>MERGE</c>). Quando usado, a PK gerada pelo banco não é inserida (o banco a
+    /// gera) e as próprias colunas de match não entram no UPDATE. Vazio/null = correlaciona por PK.
+    /// </summary>
+    public IReadOnlyList<string>? MatchProperties { get; init; }
 }

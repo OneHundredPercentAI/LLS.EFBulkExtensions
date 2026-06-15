@@ -35,8 +35,12 @@ delete e insert-or-update (upsert).
   (só os valores de PK importam), em lotes via `Contains`, sem `WHERE IN` gigante. O EF traduz
   da melhor forma por provedor (PostgreSQL `= ANY(@array)`, SQL Server `OPENJSON`, SQLite/MySQL
   `IN`). Retorna entidades desanexadas; v1 só com PK de coluna única.
-- [ ] **Upsert por chave natural** (`MatchProperties`) além da PK; e **retorno de IDs**
-  no upsert. O upsert v1 correlaciona somente por PK e não retorna IDs.
+- [x] **Upsert por chave natural** (`MatchProperties`): correlaciona por colunas que não a PK,
+  usando o mecanismo nativo (`ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`). Exige índice/constraint
+  ÚNICO nas colunas de match (validado no modelo; erro claro caso contrário). A PK gerada não é
+  inserida (o banco a gera) e as colunas de match não entram no UPDATE. Validado nos 4 providers.
+- [ ] **Retorno de IDs no upsert** (`OUTPUT`/`RETURNING` correlacionado). O upsert ainda não
+  devolve os IDs gerados — pendente como incremento separado.
 - [x] **`BulkInsertOrUpdateOrDeleteAsync`** (sincronização/espelhamento de tabela): insere as
   chaves novas, atualiza as existentes e remove as linhas cuja PK não está no conjunto. Reaproveita
   o upsert (incl. `UpdateColumns`) e usa o `ExecuteDelete` do EF para o delete; tudo numa transação.
@@ -72,8 +76,9 @@ delete e insert-or-update (upsert).
   padrão, o valor continua sendo o nome curto do tipo.
 - **Tipos de ID para retorno**: numéricos inteiros (e anuláveis) e `Guid`. Outros
   tipos não são suportados em `ReturnGeneratedIds`.
-- **Upsert (v1)**: correspondência somente por PK (valores de PK obrigatórios); não
-  retorna IDs; colunas computadas/`OnAddOrUpdate` não são tratadas no ramo de insert.
+- **Upsert (v1)**: correlaciona por PK (valores de PK obrigatórios) ou por chave natural via
+  `MatchProperties` (exige índice único); não retorna IDs; colunas computadas/`OnAddOrUpdate`
+  não são tratadas no ramo de insert.
 
 ## Testes
 - Suíte determinística (rápida, em `Category!=Performance`) cobre SQLite, PostgreSQL,
